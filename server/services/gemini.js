@@ -1,0 +1,138 @@
+import { GoogleGenAI } from "@google/genai";
+import { env } from "../config/env.js";
+
+const soilColors = {
+  Clay: "#6c6258",
+  Sandy: "#c7a66d",
+  Loamy: "#8a5a36",
+  Silty: "#8f8172",
+  Peaty: "#4a3428",
+  Chalky: "#d6c8a8",
+  Laterite: "#a33d2e",
+  Alluvial: "#9a6b3f",
+  Unknown: "#8a5a36"
+};
+
+const responseSchema = {
+  type: "object",
+  properties: {
+    soilType: {
+      type: "string",
+      enum: ["Clay", "Sandy", "Loamy", "Silty", "Peaty", "Chalky", "Laterite", "Alluvial", "Unknown"]
+    },
+    confidence: { type: "number", minimum: 0, maximum: 100 },
+    texture: { type: "string" },
+    visibleColor: { type: "string" },
+    summary: { type: "string" },
+    healthScore: { type: "number", minimum: 0, maximum: 100 },
+    riskLevel: { type: "string", enum: ["Low", "Medium", "High"] },
+    nutrients: { type: "array", items: { type: "string" } },
+    cropSuitability: { type: "array", items: { type: "string" } },
+    recommendations: { type: "array", items: { type: "string" } },
+    warnings: { type: "array", items: { type: "string" } },
+    irrigation: { type: "string" }
+  },
+  required: [
+    "soilType",
+    "confidence",
+    "texture",
+    "visibleColor",
+    "summary",
+    "healthScore",
+    "riskLevel",
+    "nutrients",
+    "cropSuitability",
+    "recommendations",
+    "warnings",
+    "irrigation"
+  ],
+  propertyOrdering: [
+    "soilType",
+    "confidence",
+    "texture",
+    "visibleColor",
+    "summary",
+    "healthScore",
+    "riskLevel",
+    "nutrients",
+    "cropSuitability",
+    "recommendations",
+    "warnings",
+    "irrigation"
+  ]
+};
+
+function parseJsonResponse(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("Gemini returned a non-JSON soil analysis.");
+    return JSON.parse(match[0]);
+  }
+}
+
+export async function analyzeSoilPhoto({ file, input = {}, type = "soil_identifier" }) {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is required for AI soil photo analysis.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  const base64Image = file.buffer.toString("base64");
+  const prompt = `
+You are an agronomy assistant analyzing a farmer's soil photo.
+Classify the visible soil into one of: Clay, Sandy, Loamy, Silty, Peaty, Chalky, Laterite, Alluvial, Unknown.
+Return a practical farmer-facing result. If the image is not soil or too unclear, set soilType to Unknown, confidence below 45, and explain why.
+
+Context:
+- Feature: ${type}
+- Crop grown: ${input.crop || "not provided"}
+- Location: ${input.location || "not provided"}
+- Land type: ${input.landType || "not provided"}
+- Farmer notes: ${input.notes || "not provided"}
+- Optional observed texture: ${input.texture || "not provided"}
+- Optional observed drainage: ${input.drainage || "not provided"}
+- Optional observed pH: ${input.ph || "not provided"}
+`;
+
+  const response = await ai.models.generateContent({
+    model: env.GEMINI_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: file.mimetype, data: base64Image } },
+          { text: prompt }
+        ]
+      }
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema,
+      temperature: 0.2
+    }
+  });
+
+  const parsed = parseJsonResponse(response.text || "{}");
+  const soilType = parsed.soilType || "Unknown";
+  const confidence = Math.max(0, Math.min(100, Number(parsed.confidence) || 0));
+  const healthScore = Math.max(0, Math.min(100, Number(parsed.healthScore) || 70));
+
+  return {
+    soilType,
+    confidence,
+    healthScore,
+    riskLevel: parsed.riskLevel || "Medium",
+    soilColor: soilColors[soilType] || soilColors.Unknown,
+    texture: parsed.texture || "",
+    summary: parsed.summary || "The model could not produce a detailed soil summary.",
+    recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.slice(0, 6) : [],
+    nutrients: Array.isArray(parsed.nutrients) ? parsed.nutrients.slice(0, 5) : [],
+    irrigation: parsed.irrigation || "",
+    bestCrops: Array.isArray(parsed.cropSuitability) ? parsed.cropSuitability.slice(0, 6) : [],
+    alerts: Array.isArray(parsed.warnings) ? parsed.warnings.slice(0, 5) : [],
+    note: "AI photo analysis is guidance only. Confirm fertilizer and pH decisions with a lab soil test.",
+    model: env.GEMINI_MODEL,
+    raw: parsed
+  };
+}
