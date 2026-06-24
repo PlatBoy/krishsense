@@ -180,9 +180,30 @@ function App() {
     );
   }
 
-  if (!session) return <LoginView onLogin={handleLogin} />;
+  if (!session) {
+    return (
+      <>
+        <LoginView onLogin={handleLogin} />
+        <AppFooter />
+      </>
+    );
+  }
 
-  return <Dashboard session={session} onLogout={handleLogout} />;
+  return (
+    <>
+      <Dashboard session={session} onLogout={handleLogout} />
+      <AppFooter />
+    </>
+  );
+}
+
+function AppFooter() {
+  return (
+    <footer className="site-footer">
+      <span>Developed by Aksh Rawat</span>
+      <span>{"<3"}</span>
+    </footer>
+  );
 }
 
 function LoginView({ onLogin }) {
