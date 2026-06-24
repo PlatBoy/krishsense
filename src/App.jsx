@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
+  Download,
   Droplets,
   FlaskConical,
   Gauge,
@@ -17,12 +18,16 @@ import {
   LogOut,
   Mail,
   MapPin,
+  Moon,
   RefreshCw,
   Ruler,
   Search,
   ShieldCheck,
   Sprout,
+  Sun,
+  Target,
   Trash2,
+  TrendingUp,
   Upload,
   UserX,
   UserPlus,
@@ -33,6 +38,7 @@ import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 const SESSION_KEY = "krishsense-session";
+const THEME_KEY = "krishsense-theme";
 const fieldImage =
   "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80";
 
@@ -170,6 +176,90 @@ function formatMoney(value) {
   }).format(Number(value || 0));
 }
 
+function getInitialTheme() {
+  try {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
+  } catch {
+    return "light";
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function csvValue(value) {
+  const clean = String(value ?? "").replaceAll('"', '""');
+  return `"${clean}"`;
+}
+
+function downloadTextFile(filename, content, type = "text/plain;charset=utf-8") {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportAnalysesCsv(analyses) {
+  const header = ["Date", "Soil", "Confidence", "Health", "Risk", "Crop", "Land", "Status", "Summary"];
+  const rows = analyses.map((analysis) => [
+    formatDate(analysis.createdAt),
+    analysis.result?.soilType,
+    analysis.result?.confidence,
+    analysis.result?.healthScore,
+    analysis.result?.riskLevel,
+    analysis.input?.crop,
+    `${analysis.input?.landArea || ""} ${analysis.input?.landUnit || ""}`.trim(),
+    titleCase(analysis.status),
+    analysis.result?.summary
+  ]);
+  const csv = [header, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
+  downloadTextFile(`krishsense-reports-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+}
+
+function topEntries(values, limit = 3) {
+  const counts = new Map();
+  values.filter(Boolean).forEach((value) => counts.set(value, (counts.get(value) || 0) + 1));
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
+}
+
+function buildFarmerInsights(analyses, loans) {
+  const latest = analyses[0];
+  const healthScores = analyses.map((analysis) => Number(analysis.result?.healthScore)).filter(Number.isFinite);
+  const averageHealth = healthScores.length
+    ? Math.round(healthScores.reduce((total, score) => total + score, 0) / healthScores.length)
+    : null;
+  const soilMix = topEntries(analyses.map((analysis) => analysis.result?.soilType), 4);
+  const cropCandidates = topEntries(analyses.flatMap((analysis) => analysis.result?.bestCrops || []), 4);
+  const highRiskCount = analyses.filter((analysis) => analysis.result?.riskLevel === "High").length;
+  const pendingLoans = loans.filter((loan) => loan.status === "pending").length;
+  const approvedLoans = loans.filter((loan) => loan.status === "approved").length;
+  const rejectedLoans = loans.filter((loan) => loan.status === "rejected").length;
+  const actions = [];
+
+  if (!analyses.length) actions.push("Start with one soil analysis to unlock field-specific guidance.");
+  if (latest?.result?.alerts?.length) actions.push(...latest.result.alerts.slice(0, 2));
+  if (latest?.result?.recommendations?.length) actions.push(...latest.result.recommendations.slice(0, 3));
+  if (highRiskCount) actions.push(`${highRiskCount} report${highRiskCount === 1 ? "" : "s"} marked high risk need review.`);
+  if (pendingLoans) actions.push(`${pendingLoans} loan request${pendingLoans === 1 ? "" : "s"} still awaiting admin decision.`);
+  if (!actions.length) actions.push("Fields look stable based on saved reports.");
+
+  return {
+    averageHealth,
+    dominantSoil: soilMix[0]?.[0] || "No data",
+    suggestedCrop: cropCandidates[0]?.[0] || latest?.input?.crop || "No data",
+    highRiskCount,
+    pendingLoans,
+    approvedLoans,
+    rejectedLoans,
+    soilMix,
+    cropCandidates,
+    actions: actions.slice(0, 5)
+  };
+}
+
 function App() {
   const [session, setSession] = useState(() => {
     try {
@@ -178,7 +268,13 @@ function App() {
       return null;
     }
   });
+  const [theme, setTheme] = useState(getInitialTheme);
   const [booting, setBooting] = useState(Boolean(session?.token));
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!session?.token) {
@@ -217,7 +313,7 @@ function App() {
   if (!session) {
     return (
       <>
-        <LoginView onLogin={handleLogin} />
+        <LoginView onLogin={handleLogin} theme={theme} onThemeToggle={() => setTheme((current) => (current === "dark" ? "light" : "dark"))} />
         <AppFooter />
       </>
     );
@@ -225,7 +321,12 @@ function App() {
 
   return (
     <>
-      <Dashboard session={session} onLogout={handleLogout} />
+      <Dashboard
+        session={session}
+        onLogout={handleLogout}
+        theme={theme}
+        onThemeToggle={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+      />
       <AppFooter />
     </>
   );
@@ -240,7 +341,26 @@ function AppFooter() {
   );
 }
 
-function LoginView({ onLogin }) {
+function ThemeSwitch({ theme, onToggle }) {
+  const dark = theme === "dark";
+  return (
+    <button
+      className="theme-switch"
+      type="button"
+      role="switch"
+      aria-checked={dark}
+      onClick={onToggle}
+      title={dark ? "Use light background" : "Use dark background"}
+    >
+      <span className="theme-switch-track">
+        <span />
+      </span>
+      {dark ? <Moon size={17} /> : <Sun size={17} />}
+    </button>
+  );
+}
+
+function LoginView({ onLogin, theme, onThemeToggle }) {
   const [mode, setMode] = useState("login");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -322,6 +442,10 @@ function LoginView({ onLogin }) {
       </section>
 
       <section className="auth-panel">
+        <div className="auth-panel-actions">
+          <ThemeSwitch theme={theme} onToggle={onThemeToggle} />
+        </div>
+
         <div className="panel-heading">
           <span className="eyebrow">Secure access</span>
           <h2>{mode === "login" ? "Welcome back" : "Create farmer account"}</h2>
@@ -425,7 +549,7 @@ function LoginView({ onLogin }) {
   );
 }
 
-function Dashboard({ session, onLogout }) {
+function Dashboard({ session, onLogout, theme, onThemeToggle }) {
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -439,6 +563,7 @@ function Dashboard({ session, onLogout }) {
           </div>
         </div>
         <div className="topbar-actions">
+          <ThemeSwitch theme={theme} onToggle={onThemeToggle} />
           <span className="user-pill">
             {session.user.role === "admin" ? <ShieldCheck size={16} /> : <Wheat size={16} />}
             {session.user.name}
@@ -483,6 +608,7 @@ function FarmerDashboard({ token, user }) {
   const latest = analyses[0];
   const pending = analyses.filter((analysis) => analysis.status === "pending").length;
   const pendingLoans = loans.filter((loan) => loan.status === "pending").length;
+  const insights = useMemo(() => buildFarmerInsights(analyses, loans), [analyses, loans]);
 
   return (
     <div className="dashboard-grid">
@@ -507,6 +633,10 @@ function FarmerDashboard({ token, user }) {
             <ClipboardList size={18} />
             History
           </button>
+          <button className={activeView === "insights" ? "active" : ""} onClick={() => setActiveView("insights")}>
+            <TrendingUp size={18} />
+            Insights
+          </button>
           <button className={activeView === "loans" ? "active" : ""} onClick={() => setActiveView("loans")}>
             <HandCoins size={18} />
             Loans
@@ -524,11 +654,13 @@ function FarmerDashboard({ token, user }) {
           <Metric icon={<Clock3 size={19} />} label="Pending review" value={pending} />
           <Metric icon={<Leaf size={19} />} label="Latest soil" value={latest?.result.soilType || "None"} />
           <Metric icon={<HandCoins size={19} />} label="Loan requests" value={pendingLoans ? `${pendingLoans} pending` : loans.length} />
+          <Metric icon={<TrendingUp size={19} />} label="Avg health" value={insights.averageHealth ?? "None"} />
         </div>
 
         {activeView === "analysis" && <SoilAnalysisForm token={token} onCreated={loadAnalyses} />}
         {activeView === "identify" && <SoilIdentifierUpload token={token} onCreated={loadAnalyses} />}
         {activeView === "history" && <AnalysisHistory analyses={analyses} loading={loading} />}
+        {activeView === "insights" && <FarmerInsightCenter insights={insights} analyses={analyses} />}
         {activeView === "loans" && <FarmerLoanPanel token={token} loans={loans} onChanged={loadLoans} />}
         {activeView === "account" && <PasswordPanel token={token} />}
       </section>
@@ -910,6 +1042,101 @@ function SoilIdentifierUpload({ token, onCreated }) {
   );
 }
 
+function FarmerInsightCenter({ insights, analyses }) {
+  return (
+    <div className="insight-layout">
+      <section className="insight-hero">
+        <div>
+          <span className="eyebrow">Farm intelligence</span>
+          <h2>Field health snapshot</h2>
+        </div>
+        <div className="insight-summary">
+          <InsightTile icon={<TrendingUp size={18} />} label="Average health" value={insights.averageHealth ?? "No data"} />
+          <InsightTile icon={<Leaf size={18} />} label="Dominant soil" value={insights.dominantSoil} />
+          <InsightTile icon={<Wheat size={18} />} label="Crop candidate" value={insights.suggestedCrop} />
+          <InsightTile icon={<AlertTriangle size={18} />} label="High risk" value={insights.highRiskCount} />
+        </div>
+      </section>
+
+      <div className="insight-columns">
+        <section className="form-card">
+          <div className="section-heading compact-heading">
+            <span className="eyebrow">Action plan</span>
+            <h2>Next moves</h2>
+          </div>
+          <div className="action-plan">
+            {insights.actions.map((action) => (
+              <p key={action}>
+                <Target size={16} />
+                {action}
+              </p>
+            ))}
+          </div>
+        </section>
+
+        <section className="form-card">
+          <div className="section-heading compact-heading">
+            <span className="eyebrow">Crop signals</span>
+            <h2>Best matches</h2>
+          </div>
+          <SignalBars entries={insights.cropCandidates} emptyLabel={analyses.length ? "No crop candidates yet" : "No reports yet"} />
+        </section>
+
+        <section className="form-card">
+          <div className="section-heading compact-heading">
+            <span className="eyebrow">Soil profile</span>
+            <h2>Report mix</h2>
+          </div>
+          <SignalBars entries={insights.soilMix} emptyLabel={analyses.length ? "No soil mix yet" : "No reports yet"} />
+        </section>
+
+        <section className="form-card">
+          <div className="section-heading compact-heading">
+            <span className="eyebrow">Loan status</span>
+            <h2>Finance pulse</h2>
+          </div>
+          <div className="finance-pulse">
+            <span><Clock3 size={16} /> {insights.pendingLoans} pending</span>
+            <span><CheckCircle2 size={16} /> {insights.approvedLoans} approved</span>
+            <span><UserX size={16} /> {insights.rejectedLoans} rejected</span>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function InsightTile({ icon, label, value }) {
+  return (
+    <div className="insight-tile">
+      <span>{icon}</span>
+      <p>{label}</p>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function SignalBars({ entries, emptyLabel }) {
+  if (!entries.length) return <p className="muted-note">{emptyLabel}</p>;
+  const max = Math.max(...entries.map(([, count]) => count), 1);
+
+  return (
+    <div className="signal-bars">
+      {entries.map(([label, count]) => (
+        <div className="signal-row" key={label}>
+          <div>
+            <strong>{label}</strong>
+            <span>{count}</span>
+          </div>
+          <span className="signal-track">
+            <span style={{ width: `${Math.max(18, (count / max) * 100)}%` }} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FarmerLoanPanel({ token, loans, onChanged }) {
   const [form, setForm] = useState({
     amount: "",
@@ -1233,15 +1460,84 @@ function PasswordPanel({ token }) {
 }
 
 function AnalysisHistory({ analyses, loading }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [soilFilter, setSoilFilter] = useState("all");
+  const soilOptions = useMemo(
+    () => [...new Set(analyses.map((analysis) => analysis.result?.soilType).filter(Boolean))].sort(),
+    [analyses]
+  );
+  const filteredAnalyses = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return analyses.filter((analysis) => {
+      const matchesStatus = statusFilter === "all" || analysis.status === statusFilter;
+      const matchesSoil = soilFilter === "all" || analysis.result?.soilType === soilFilter;
+      const haystack = [
+        analysis.result?.soilType,
+        analysis.result?.summary,
+        analysis.input?.crop,
+        analysis.input?.location,
+        analysis.result?.riskLevel
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return matchesStatus && matchesSoil && (!search || haystack.includes(search));
+    });
+  }, [analyses, query, statusFilter, soilFilter]);
+
   if (loading) return <div className="empty-state"><RefreshCw size={34} /><h3>Loading reports</h3></div>;
   if (!analyses.length) return <div className="empty-state"><ClipboardList size={34} /><h3>No reports yet</h3><p>Submit a field report to start history.</p></div>;
 
   return (
-    <div className="history-list">
-      {analyses.map((analysis) => (
-        <AnalysisCard key={analysis.id} analysis={analysis} />
-      ))}
-    </div>
+    <>
+      <section className="history-toolbar">
+        <label>
+          Search
+          <span className="input-shell">
+            <Search size={17} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Soil, crop, risk, location" />
+          </span>
+        </label>
+        <label>
+          Status
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="all">All</option>
+            <option value="pending">Pending</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="follow_up">Follow up</option>
+          </select>
+        </label>
+        <label>
+          Soil
+          <select value={soilFilter} onChange={(event) => setSoilFilter(event.target.value)}>
+            <option value="all">All</option>
+            {soilOptions.map((soil) => (
+              <option key={soil} value={soil}>
+                {soil}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="secondary-button" disabled={!filteredAnalyses.length} onClick={() => exportAnalysesCsv(filteredAnalyses)}>
+          <Download size={17} />
+          Export CSV
+        </button>
+      </section>
+
+      {filteredAnalyses.length ? (
+        <div className="history-list">
+          {filteredAnalyses.map((analysis) => (
+            <AnalysisCard key={analysis.id} analysis={analysis} />
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <Search size={34} />
+          <h3>No matching reports</h3>
+        </div>
+      )}
+    </>
   );
 }
 
