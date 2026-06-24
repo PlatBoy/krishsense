@@ -3,7 +3,7 @@ import { Router } from "express";
 import { requireAuth, signToken } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { User } from "../models/User.js";
-import { loginSchema, registerSchema } from "../validation/schemas.js";
+import { loginSchema, passwordChangeSchema, registerSchema } from "../validation/schemas.js";
 import { HttpError } from "../utils/httpError.js";
 
 export const authRouter = Router();
@@ -45,4 +45,21 @@ authRouter.post("/login", validateBody(loginSchema), async (req, res, next) => {
 
 authRouter.get("/me", requireAuth, (req, res) => {
   res.json({ user: req.user.toJSON() });
+});
+
+authRouter.patch("/password", requireAuth, validateBody(passwordChangeSchema), async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select("+passwordHash");
+    if (!user) throw new HttpError(404, "User not found");
+
+    const valid = await bcrypt.compare(req.body.currentPassword, user.passwordHash);
+    if (!valid) throw new HttpError(401, "Current password is incorrect");
+
+    user.passwordHash = await bcrypt.hash(req.body.newPassword, 12);
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    next(error);
+  }
 });

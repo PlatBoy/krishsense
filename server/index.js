@@ -10,6 +10,7 @@ import { assertProductionEnv, clientOrigins, env } from "./config/env.js";
 import { authRouter } from "./routes/auth.js";
 import { connectDatabase } from "./config/database.js";
 import { ensureSeedAdmin } from "./services/users.js";
+import { loansRouter } from "./routes/loans.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,6 +66,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/analyses", analysesRouter);
+app.use("/api/loans", loansRouter);
 app.use("/api/admin", adminRouter);
 
 app.use(express.static(DIST_DIR));

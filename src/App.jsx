@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Ban,
   BarChart3,
   Camera,
   CheckCircle2,
@@ -8,7 +9,9 @@ import {
   Droplets,
   FlaskConical,
   Gauge,
+  HandCoins,
   Image as ImageIcon,
+  KeyRound,
   Leaf,
   Lock,
   LogOut,
@@ -19,7 +22,9 @@ import {
   Search,
   ShieldCheck,
   Sprout,
+  Trash2,
   Upload,
+  UserX,
   UserPlus,
   Users,
   Wheat
@@ -98,6 +103,27 @@ const identifierClientSchema = z.object({
   photo: z.instanceof(File, { message: "Upload a soil photo to identify." })
 });
 
+const passwordClientSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required."),
+    newPassword: z.string().min(8, "Use at least 8 characters."),
+    confirmPassword: z.string().min(8, "Confirm the new password.")
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "New passwords do not match.",
+    path: ["confirmPassword"]
+  });
+
+const adminPasswordClientSchema = z.object({
+  password: z.string().min(8, "Use at least 8 characters.")
+});
+
+const loanClientSchema = z.object({
+  amount: z.coerce.number().min(1000, "Enter at least 1000."),
+  purpose: z.string().trim().min(3, "Loan purpose is required."),
+  tenureMonths: z.coerce.number().int().min(1, "Tenure is required.").max(120, "Maximum tenure is 120 months.")
+});
+
 function firstValidationMessage(result) {
   return result.success ? "" : result.error.issues[0]?.message || "Please check the form.";
 }
@@ -134,6 +160,14 @@ function titleCase(value) {
   return String(value || "")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0
+  }).format(Number(value || 0));
 }
 
 function App() {
@@ -427,6 +461,7 @@ function Dashboard({ session, onLogout }) {
 function FarmerDashboard({ token, user }) {
   const [activeView, setActiveView] = useState("analysis");
   const [analyses, setAnalyses] = useState([]);
+  const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
 
   async function loadAnalyses() {
@@ -436,12 +471,18 @@ function FarmerDashboard({ token, user }) {
     setLoading(false);
   }
 
+  async function loadLoans() {
+    const data = await apiRequest("/api/loans", { token });
+    setLoans(data.loans);
+  }
+
   useEffect(() => {
-    loadAnalyses().catch(() => setLoading(false));
+    Promise.all([loadAnalyses(), loadLoans()]).catch(() => setLoading(false));
   }, []);
 
   const latest = analyses[0];
   const pending = analyses.filter((analysis) => analysis.status === "pending").length;
+  const pendingLoans = loans.filter((loan) => loan.status === "pending").length;
 
   return (
     <div className="dashboard-grid">
@@ -466,6 +507,14 @@ function FarmerDashboard({ token, user }) {
             <ClipboardList size={18} />
             History
           </button>
+          <button className={activeView === "loans" ? "active" : ""} onClick={() => setActiveView("loans")}>
+            <HandCoins size={18} />
+            Loans
+          </button>
+          <button className={activeView === "account" ? "active" : ""} onClick={() => setActiveView("account")}>
+            <KeyRound size={18} />
+            Account
+          </button>
         </nav>
       </aside>
 
@@ -474,11 +523,14 @@ function FarmerDashboard({ token, user }) {
           <Metric icon={<FlaskConical size={19} />} label="Analyses" value={analyses.length} />
           <Metric icon={<Clock3 size={19} />} label="Pending review" value={pending} />
           <Metric icon={<Leaf size={19} />} label="Latest soil" value={latest?.result.soilType || "None"} />
+          <Metric icon={<HandCoins size={19} />} label="Loan requests" value={pendingLoans ? `${pendingLoans} pending` : loans.length} />
         </div>
 
         {activeView === "analysis" && <SoilAnalysisForm token={token} onCreated={loadAnalyses} />}
         {activeView === "identify" && <SoilIdentifierUpload token={token} onCreated={loadAnalyses} />}
         {activeView === "history" && <AnalysisHistory analyses={analyses} loading={loading} />}
+        {activeView === "loans" && <FarmerLoanPanel token={token} loans={loans} onChanged={loadLoans} />}
+        {activeView === "account" && <PasswordPanel token={token} />}
       </section>
     </div>
   );
@@ -858,6 +910,328 @@ function SoilIdentifierUpload({ token, onCreated }) {
   );
 }
 
+function FarmerLoanPanel({ token, loans, onChanged }) {
+  const [form, setForm] = useState({
+    amount: "",
+    purpose: "",
+    crop: "",
+    landArea: "",
+    landUnit: "acre",
+    tenureMonths: "12",
+    farmerNote: ""
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submitLoan(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const validation = loanClientSchema.safeParse(form);
+      if (!validation.success) throw new Error(firstValidationMessage(validation));
+
+      await apiRequest("/api/loans", {
+        token,
+        method: "POST",
+        body: form
+      });
+
+      setForm({
+        amount: "",
+        purpose: "",
+        crop: "",
+        landArea: "",
+        landUnit: "acre",
+        tenureMonths: "12",
+        farmerNote: ""
+      });
+      setMessage("Loan application submitted for admin review.");
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="work-surface">
+      <section className="form-card">
+        <div className="section-heading">
+          <span className="eyebrow">Loan support</span>
+          <h2>Apply for a crop loan</h2>
+        </div>
+        {error && <p className="error-banner">{error}</p>}
+        {message && <p className="success-banner">{message}</p>}
+
+        <form className="analysis-form" onSubmit={submitLoan}>
+          <div className="form-grid">
+            <label>
+              Amount
+              <span className="input-shell">
+                <HandCoins size={17} />
+                <input
+                  type="number"
+                  min="1000"
+                  step="500"
+                  value={form.amount}
+                  onChange={(event) => updateField("amount", event.target.value)}
+                  required
+                />
+              </span>
+            </label>
+            <label>
+              Tenure
+              <span className="input-shell">
+                <Clock3 size={17} />
+                <input
+                  type="number"
+                  min="1"
+                  max="120"
+                  value={form.tenureMonths}
+                  onChange={(event) => updateField("tenureMonths", event.target.value)}
+                  required
+                />
+              </span>
+            </label>
+            <label>
+              Purpose
+              <input
+                value={form.purpose}
+                onChange={(event) => updateField("purpose", event.target.value)}
+                placeholder="Seeds, fertilizer, equipment"
+                required
+              />
+            </label>
+            <label>
+              Crop
+              <span className="input-shell">
+                <Wheat size={17} />
+                <input value={form.crop} onChange={(event) => updateField("crop", event.target.value)} />
+              </span>
+            </label>
+            <label>
+              Land area
+              <span className="input-shell split-input">
+                <Ruler size={17} />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.landArea}
+                  onChange={(event) => updateField("landArea", event.target.value)}
+                />
+                <select value={form.landUnit} onChange={(event) => updateField("landUnit", event.target.value)}>
+                  <option value="acre">Acre</option>
+                  <option value="hectare">Hectare</option>
+                  <option value="bigha">Bigha</option>
+                </select>
+              </span>
+            </label>
+          </div>
+
+          <label>
+            Farmer note
+            <textarea
+              value={form.farmerNote}
+              onChange={(event) => updateField("farmerNote", event.target.value)}
+              rows={3}
+              placeholder="Optional repayment context or requested support"
+            />
+          </label>
+
+          <button className="primary-button" disabled={busy}>
+            <HandCoins size={18} />
+            {busy ? "Submitting" : "Submit loan request"}
+          </button>
+        </form>
+      </section>
+
+      <LoanList loans={loans} />
+    </div>
+  );
+}
+
+function LoanList({ loans }) {
+  if (!loans.length) {
+    return (
+      <div className="empty-state">
+        <HandCoins size={36} />
+        <h3>No loan requests</h3>
+        <p>Submitted loan applications will appear here with admin decisions.</p>
+      </div>
+    );
+  }
+
+  return (
+    <section className="loan-list" aria-label="Loan applications">
+      {loans.map((loan) => (
+        <LoanCard key={loan.id} loan={loan} />
+      ))}
+    </section>
+  );
+}
+
+function LoanCard({ loan, adminMode = false, onDecision }) {
+  const [adminNote, setAdminNote] = useState(loan.adminNote || "");
+  const [busy, setBusy] = useState(false);
+
+  async function decide(status) {
+    if (!onDecision) return;
+    setBusy(true);
+    try {
+      await onDecision(loan.id, status, adminNote);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <article className="loan-card">
+      <div className="loan-card-header">
+        <div>
+          <span>{formatDate(loan.createdAt)}</span>
+          <h3>{formatMoney(loan.amount)}</h3>
+        </div>
+        <span className={`status-badge ${loan.status}`}>{titleCase(loan.status)}</span>
+      </div>
+
+      <p>{loan.purpose}</p>
+      <div className="analysis-tags">
+        <span>{loan.tenureMonths} months</span>
+        <span>{loan.crop || "Crop not set"}</span>
+        <span>{loan.landArea ? `${loan.landArea} ${loan.landUnit}` : "Land not set"}</span>
+        {adminMode && <span>{loan.farmerName}</span>}
+      </div>
+
+      {loan.farmerNote && <p className="loan-note">{loan.farmerNote}</p>}
+      {loan.adminNote && <p className="loan-note admin-note">{loan.adminNote}</p>}
+
+      {adminMode && (
+        <div className="loan-actions">
+          <textarea
+            value={adminNote}
+            onChange={(event) => setAdminNote(event.target.value)}
+            rows={2}
+            placeholder="Admin note"
+          />
+          <div className="action-row">
+            <button className="secondary-button" disabled={busy} onClick={() => decide("approved")}>
+              <CheckCircle2 size={16} />
+              Approve
+            </button>
+            <button className="danger-button" disabled={busy} onClick={() => decide("rejected")}>
+              <UserX size={16} />
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function PasswordPanel({ token }) {
+  const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submitPassword(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const validation = passwordClientSchema.safeParse(form);
+      if (!validation.success) throw new Error(firstValidationMessage(validation));
+
+      await apiRequest("/api/auth/password", {
+        token,
+        method: "PATCH",
+        body: {
+          currentPassword: form.currentPassword,
+          newPassword: form.newPassword
+        }
+      });
+
+      setForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      setMessage("Password changed successfully.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="form-card account-panel">
+      <div className="section-heading">
+        <span className="eyebrow">Account security</span>
+        <h2>Change password</h2>
+      </div>
+      {error && <p className="error-banner">{error}</p>}
+      {message && <p className="success-banner">{message}</p>}
+
+      <form className="stack-form" onSubmit={submitPassword}>
+        <label>
+          Current password
+          <span className="input-shell">
+            <Lock size={17} />
+            <input
+              type="password"
+              value={form.currentPassword}
+              onChange={(event) => updateField("currentPassword", event.target.value)}
+              required
+            />
+          </span>
+        </label>
+        <label>
+          New password
+          <span className="input-shell">
+            <KeyRound size={17} />
+            <input
+              type="password"
+              minLength={8}
+              value={form.newPassword}
+              onChange={(event) => updateField("newPassword", event.target.value)}
+              required
+            />
+          </span>
+        </label>
+        <label>
+          Confirm new password
+          <span className="input-shell">
+            <KeyRound size={17} />
+            <input
+              type="password"
+              minLength={8}
+              value={form.confirmPassword}
+              onChange={(event) => updateField("confirmPassword", event.target.value)}
+              required
+            />
+          </span>
+        </label>
+        <button className="primary-button" disabled={busy}>
+          <KeyRound size={18} />
+          {busy ? "Updating" : "Update password"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
 function AnalysisHistory({ analyses, loading }) {
   if (loading) return <div className="empty-state"><RefreshCw size={34} /><h3>Loading reports</h3></div>;
   if (!analyses.length) return <div className="empty-state"><ClipboardList size={34} /><h3>No reports yet</h3><p>Submit a field report to start history.</p></div>;
@@ -904,21 +1278,124 @@ function AnalysisCard({ analysis, adminMode = false, onStatusChange }) {
   );
 }
 
+function AdminUserRow({ user, onStatusChange, onPasswordReset, onRemove }) {
+  const [password, setPassword] = useState("");
+  const [busyAction, setBusyAction] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const isFarmer = user.role === "farmer";
+
+  async function runAction(action, task) {
+    setBusyAction(action);
+    setError("");
+    setMessage("");
+    try {
+      await task();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function handlePasswordReset(event) {
+    event.preventDefault();
+    const validation = adminPasswordClientSchema.safeParse({ password });
+    if (!validation.success) {
+      setError(firstValidationMessage(validation));
+      return;
+    }
+
+    await runAction("password", async () => {
+      await onPasswordReset(user.id, password);
+      setPassword("");
+      setMessage("Password reset");
+    });
+  }
+
+  function handleRemove() {
+    const confirmed = window.confirm(`Remove ${user.name}? Their reports and loan applications will also be removed.`);
+    if (!confirmed) return;
+    runAction("remove", () => onRemove(user.id));
+  }
+
+  return (
+    <tr>
+      <td>
+        <strong>{user.name}</strong>
+        {(message || error) && <span className={error ? "row-error" : "row-message"}>{error || message}</span>}
+      </td>
+      <td>{user.email}</td>
+      <td>{titleCase(user.role)}</td>
+      <td>
+        <span className={`status-badge ${user.isActive ? "active-account" : "banned-account"}`}>
+          {user.isActive ? "Active" : "Banned"}
+        </span>
+      </td>
+      <td>{user.farmName || "-"}</td>
+      <td>{user.analysisCount}</td>
+      <td>{user.loanCount}</td>
+      <td>
+        {isFarmer ? (
+          <form className="password-reset-row" onSubmit={handlePasswordReset}>
+            <input
+              type="password"
+              minLength={8}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="New password"
+            />
+            <button className="small-button" disabled={busyAction === "password"}>
+              <KeyRound size={15} />
+              Reset
+            </button>
+          </form>
+        ) : (
+          "-"
+        )}
+      </td>
+      <td>
+        {isFarmer ? (
+          <div className="table-actions">
+            <button
+              className="small-button"
+              disabled={Boolean(busyAction)}
+              onClick={() => runAction("status", () => onStatusChange(user.id, !user.isActive))}
+            >
+              {user.isActive ? <Ban size={15} /> : <ShieldCheck size={15} />}
+              {user.isActive ? "Ban" : "Unban"}
+            </button>
+            <button className="small-danger-button" disabled={Boolean(busyAction)} onClick={handleRemove}>
+              <Trash2 size={15} />
+              Remove
+            </button>
+          </div>
+        ) : (
+          "-"
+        )}
+      </td>
+    </tr>
+  );
+}
+
 function AdminDashboard({ token }) {
   const [tab, setTab] = useState("reports");
   const [analyses, setAnalyses] = useState([]);
+  const [loans, setLoans] = useState([]);
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   async function loadAdminData() {
     setLoading(true);
-    const [analysisData, userData, statsData] = await Promise.all([
+    const [analysisData, loanData, userData, statsData] = await Promise.all([
       apiRequest("/api/analyses", { token }),
+      apiRequest("/api/loans", { token }),
       apiRequest("/api/admin/users", { token }),
       apiRequest("/api/admin/stats", { token })
     ]);
     setAnalyses(analysisData.analyses);
+    setLoans(loanData.loans);
     setUsers(userData.users);
     setStats(statsData.stats);
     setLoading(false);
@@ -939,6 +1416,46 @@ function AdminDashboard({ token }) {
     setStats(statsData.stats);
   }
 
+  async function updateLoanStatus(id, status, adminNote) {
+    const data = await apiRequest(`/api/admin/loans/${id}/status`, {
+      token,
+      method: "PATCH",
+      body: { status, adminNote }
+    });
+    setLoans((current) => current.map((loan) => (loan.id === id ? data.loan : loan)));
+    const statsData = await apiRequest("/api/admin/stats", { token });
+    setStats(statsData.stats);
+  }
+
+  async function updateUserStatus(id, isActive) {
+    const data = await apiRequest(`/api/admin/users/${id}/status`, {
+      token,
+      method: "PATCH",
+      body: { isActive }
+    });
+    setUsers((current) => current.map((user) => (user.id === id ? data.user : user)));
+  }
+
+  async function resetUserPassword(id, password) {
+    await apiRequest(`/api/admin/users/${id}/password`, {
+      token,
+      method: "PATCH",
+      body: { password }
+    });
+  }
+
+  async function removeUser(id) {
+    await apiRequest(`/api/admin/users/${id}`, {
+      token,
+      method: "DELETE"
+    });
+    setUsers((current) => current.filter((user) => user.id !== id));
+    setAnalyses((current) => current.filter((analysis) => analysis.userId !== id));
+    setLoans((current) => current.filter((loan) => loan.userId !== id));
+    const statsData = await apiRequest("/api/admin/stats", { token });
+    setStats(statsData.stats);
+  }
+
   const topSoils = useMemo(() => {
     if (!stats?.soilCounts) return [];
     return Object.entries(stats.soilCounts).sort((a, b) => b[1] - a[1]);
@@ -955,6 +1472,7 @@ function AdminDashboard({ token }) {
           <Metric icon={<Users size={19} />} label="Farmers" value={stats?.farmers ?? 0} />
           <Metric icon={<FlaskConical size={19} />} label="Reports" value={stats?.totalAnalyses ?? 0} />
           <Metric icon={<Clock3 size={19} />} label="Pending" value={stats?.pending ?? 0} />
+          <Metric icon={<HandCoins size={19} />} label="Loan queue" value={stats?.pendingLoans ?? 0} />
         </div>
       </section>
 
@@ -962,6 +1480,10 @@ function AdminDashboard({ token }) {
         <button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")}>
           <ClipboardList size={16} />
           Reports
+        </button>
+        <button className={tab === "loans" ? "active" : ""} onClick={() => setTab("loans")}>
+          <HandCoins size={16} />
+          Loans
         </button>
         <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
           <Users size={16} />
@@ -995,6 +1517,21 @@ function AdminDashboard({ token }) {
             </div>
           )}
 
+          {tab === "loans" && (
+            <div className="loan-list">
+              {loans.length ? (
+                loans.map((loan) => (
+                  <LoanCard key={loan.id} loan={loan} adminMode onDecision={updateLoanStatus} />
+                ))
+              ) : (
+                <div className="empty-state">
+                  <HandCoins size={34} />
+                  <h3>No loan applications</h3>
+                </div>
+              )}
+            </div>
+          )}
+
           {tab === "users" && (
             <div className="table-shell">
               <table>
@@ -1003,19 +1540,23 @@ function AdminDashboard({ token }) {
                     <th>Name</th>
                     <th>Email</th>
                     <th>Role</th>
+                    <th>Status</th>
                     <th>Farm</th>
                     <th>Reports</th>
+                    <th>Loans</th>
+                    <th>Password</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.id}>
-                      <td>{user.name}</td>
-                      <td>{user.email}</td>
-                      <td>{titleCase(user.role)}</td>
-                      <td>{user.farmName || "-"}</td>
-                      <td>{user.analysisCount}</td>
-                    </tr>
+                    <AdminUserRow
+                      key={user.id}
+                      user={user}
+                      onStatusChange={updateUserStatus}
+                      onPasswordReset={resetUserPassword}
+                      onRemove={removeUser}
+                    />
                   ))}
                 </tbody>
               </table>
