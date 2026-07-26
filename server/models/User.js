@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ["farmer", "admin"], default: "farmer", index: true },
     farmName: { type: String, trim: true, maxlength: 160, default: "" },
     phone: { type: String, trim: true, maxlength: 40, default: "" },
+    walletBalance: { type: Number, min: 0, default: 0 },
     isActive: { type: Boolean, default: true }
   },
   { timestamps: true }

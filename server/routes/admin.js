@@ -4,6 +4,7 @@ import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { Analysis } from "../models/Analysis.js";
 import { LoanApplication } from "../models/LoanApplication.js";
+import { MarketOrder } from "../models/MarketOrder.js";
 import { User } from "../models/User.js";
 import { adminPasswordResetSchema, loanStatusSchema, statusSchema, userStatusSchema } from "../validation/schemas.js";
 import { HttpError, notFound } from "../utils/httpError.js";
@@ -30,19 +31,22 @@ function serializeLoan(loan) {
 
 adminRouter.get("/users", async (_req, res, next) => {
   try {
-    const [users, analysisCounts, loanCounts] = await Promise.all([
+    const [users, analysisCounts, loanCounts, orderCounts] = await Promise.all([
       User.find().sort({ createdAt: -1 }),
       Analysis.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }]),
-      LoanApplication.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }])
+      LoanApplication.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }]),
+      MarketOrder.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }])
     ]);
 
     const analysisCountByUser = new Map(analysisCounts.map((item) => [item._id.toString(), item.count]));
     const loanCountByUser = new Map(loanCounts.map((item) => [item._id.toString(), item.count]));
+    const orderCountByUser = new Map(orderCounts.map((item) => [item._id.toString(), item.count]));
     res.json({
       users: users.map((user) => ({
         ...user.toJSON(),
         analysisCount: analysisCountByUser.get(user._id.toString()) || 0,
-        loanCount: loanCountByUser.get(user._id.toString()) || 0
+        loanCount: loanCountByUser.get(user._id.toString()) || 0,
+        orderCount: orderCountByUser.get(user._id.toString()) || 0
       }))
     });
   } catch (error) {
@@ -52,9 +56,10 @@ adminRouter.get("/users", async (_req, res, next) => {
 
 adminRouter.get("/stats", async (_req, res, next) => {
   try {
-    const [farmers, totalAnalyses, pending, reviewed, pendingLoans, approvedLoans, rejectedLoans, soilCounts] = await Promise.all([
+    const [farmers, totalAnalyses, totalOrders, pending, reviewed, pendingLoans, approvedLoans, rejectedLoans, soilCounts] = await Promise.all([
       User.countDocuments({ role: "farmer" }),
       Analysis.countDocuments(),
+      MarketOrder.countDocuments(),
       Analysis.countDocuments({ status: "pending" }),
       Analysis.countDocuments({ status: "reviewed" }),
       LoanApplication.countDocuments({ status: "pending" }),
@@ -67,6 +72,7 @@ adminRouter.get("/stats", async (_req, res, next) => {
       stats: {
         farmers,
         totalAnalyses,
+        totalOrders,
         pending,
         reviewed,
         pendingLoans,
@@ -93,7 +99,9 @@ adminRouter.patch("/users/:id/status", validateBody(userStatusSchema), async (re
       LoanApplication.countDocuments({ user: user._id })
     ]);
 
-    res.json({ user: { ...user.toJSON(), analysisCount, loanCount } });
+    const orderCount = await MarketOrder.countDocuments({ user: user._id });
+
+    res.json({ user: { ...user.toJSON(), analysisCount, loanCount, orderCount } });
   } catch (error) {
     next(error);
   }
@@ -121,6 +129,7 @@ adminRouter.delete("/users/:id", async (req, res, next) => {
     await Promise.all([
       Analysis.deleteMany({ user: user._id }),
       LoanApplication.deleteMany({ user: user._id }),
+      MarketOrder.deleteMany({ user: user._id }),
       user.deleteOne()
     ]);
 
@@ -135,11 +144,16 @@ adminRouter.patch("/loans/:id/status", validateBody(loanStatusSchema), async (re
     const loan = await LoanApplication.findById(req.params.id);
     if (!loan) throw notFound("Loan application not found");
 
+    const shouldCreditWallet = req.body.status === "approved" && !loan.creditedAt;
     loan.status = req.body.status;
     loan.adminNote = req.body.adminNote || loan.adminNote;
     loan.reviewedBy = req.user._id;
     loan.reviewedAt = new Date();
+    if (shouldCreditWallet) loan.creditedAt = new Date();
     await loan.save();
+    if (shouldCreditWallet) {
+      await User.findByIdAndUpdate(loan.user, { $inc: { walletBalance: loan.amount } });
+    }
 
     const populated = await loan.populate("user", "name farmName email");
     res.json({ loan: serializeLoan(populated) });

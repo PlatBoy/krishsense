@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   Ban,
   BarChart3,
+  Banknote,
   Camera,
   CheckCircle2,
   ClipboardList,
@@ -23,14 +24,17 @@ import {
   Ruler,
   Search,
   ShieldCheck,
+  ShoppingCart,
   Sprout,
   Sun,
   Target,
   Trash2,
+  Tractor,
   TrendingUp,
   Upload,
   UserX,
   UserPlus,
+  Wallet,
   Users,
   Wheat
 } from "lucide-react";
@@ -128,6 +132,19 @@ const loanClientSchema = z.object({
   amount: z.coerce.number().min(1000, "Enter at least 1000."),
   purpose: z.string().trim().min(3, "Loan purpose is required."),
   tenureMonths: z.coerce.number().int().min(1, "Tenure is required.").max(120, "Maximum tenure is 120 months.")
+});
+
+const marketPurchaseClientSchema = z.object({
+  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1.").max(100, "Quantity is too high.")
+});
+
+const loanRepaymentClientSchema = z.object({
+  loanId: z.string().min(1, "Select a loan."),
+  amount: z.coerce.number().min(1, "Enter repayment amount."),
+  bankName: z.string().trim().min(2, "Bank name is required."),
+  accountName: z.string().trim().min(2, "Account holder name is required."),
+  accountNumber: z.string().trim().regex(/^\d{6,18}$/, "Use 6 to 18 bank account digits."),
+  ifsc: z.string().trim().min(4, "IFSC or bank code is required.")
 });
 
 function firstValidationMessage(result) {
@@ -259,6 +276,13 @@ function buildFarmerInsights(analyses, loans) {
     actions: actions.slice(0, 5)
   };
 }
+
+const emptyMarketState = {
+  account: { walletBalance: 0 },
+  catalog: [],
+  orders: [],
+  loans: []
+};
 
 function App() {
   const [session, setSession] = useState(() => {
@@ -587,6 +611,7 @@ function FarmerDashboard({ token, user }) {
   const [activeView, setActiveView] = useState("analysis");
   const [analyses, setAnalyses] = useState([]);
   const [loans, setLoans] = useState([]);
+  const [market, setMarket] = useState(emptyMarketState);
   const [loading, setLoading] = useState(true);
 
   async function loadAnalyses() {
@@ -601,8 +626,13 @@ function FarmerDashboard({ token, user }) {
     setLoans(data.loans);
   }
 
+  async function loadMarket() {
+    const data = await apiRequest("/api/market", { token });
+    setMarket(data);
+  }
+
   useEffect(() => {
-    Promise.all([loadAnalyses(), loadLoans()]).catch(() => setLoading(false));
+    Promise.all([loadAnalyses(), loadLoans(), loadMarket()]).catch(() => setLoading(false));
   }, []);
 
   const latest = analyses[0];
@@ -637,6 +667,10 @@ function FarmerDashboard({ token, user }) {
             <TrendingUp size={18} />
             Insights
           </button>
+          <button className={activeView === "market" ? "active" : ""} onClick={() => setActiveView("market")}>
+            <ShoppingCart size={18} />
+            Market
+          </button>
           <button className={activeView === "loans" ? "active" : ""} onClick={() => setActiveView("loans")}>
             <HandCoins size={18} />
             Loans
@@ -655,12 +689,14 @@ function FarmerDashboard({ token, user }) {
           <Metric icon={<Leaf size={19} />} label="Latest soil" value={latest?.result.soilType || "None"} />
           <Metric icon={<HandCoins size={19} />} label="Loan requests" value={pendingLoans ? `${pendingLoans} pending` : loans.length} />
           <Metric icon={<TrendingUp size={19} />} label="Avg health" value={insights.averageHealth ?? "None"} />
+          <Metric icon={<Wallet size={19} />} label="Balance" value={formatMoney(market.account?.walletBalance || 0)} />
         </div>
 
         {activeView === "analysis" && <SoilAnalysisForm token={token} onCreated={loadAnalyses} />}
         {activeView === "identify" && <SoilIdentifierUpload token={token} onCreated={loadAnalyses} />}
         {activeView === "history" && <AnalysisHistory analyses={analyses} loading={loading} />}
         {activeView === "insights" && <FarmerInsightCenter insights={insights} analyses={analyses} />}
+        {activeView === "market" && <MarketPanel token={token} market={market} onChanged={() => Promise.all([loadMarket(), loadLoans()])} />}
         {activeView === "loans" && <FarmerLoanPanel token={token} loans={loans} onChanged={loadLoans} />}
         {activeView === "account" && <PasswordPanel token={token} />}
       </section>
@@ -1133,6 +1169,238 @@ function SignalBars({ entries, emptyLabel }) {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function MarketPanel({ token, market, onChanged }) {
+  const [quantities, setQuantities] = useState({});
+  const [repayment, setRepayment] = useState({
+    loanId: "",
+    amount: "",
+    bankName: "",
+    accountName: "",
+    accountNumber: "",
+    ifsc: ""
+  });
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const groupedCatalog = useMemo(() => {
+    return market.catalog.reduce((groups, item) => {
+      groups[item.category] = groups[item.category] || [];
+      groups[item.category].push(item);
+      return groups;
+    }, {});
+  }, [market.catalog]);
+  const repayableLoans = (market.loans || []).filter((loan) => Number(loan.remainingAmount || 0) > 0);
+
+  function setQuantity(itemId, value) {
+    setQuantities((current) => ({ ...current, [itemId]: value }));
+  }
+
+  function updateRepayment(field, value) {
+    setRepayment((current) => ({ ...current, [field]: value }));
+  }
+
+  async function buyItem(item) {
+    setBusy(`buy-${item.id}`);
+    setError("");
+    setMessage("");
+    try {
+      const quantity = quantities[item.id] || 1;
+      const validation = marketPurchaseClientSchema.safeParse({ quantity });
+      if (!validation.success) throw new Error(firstValidationMessage(validation));
+
+      await apiRequest("/api/market/orders", {
+        token,
+        method: "POST",
+        body: { itemId: item.id, quantity: validation.data.quantity }
+      });
+
+      setQuantity(item.id, 1);
+      setMessage(`${item.name} order confirmed.`);
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function repayLoan(event) {
+    event.preventDefault();
+    setBusy("repay");
+    setError("");
+    setMessage("");
+    try {
+      const validation = loanRepaymentClientSchema.safeParse(repayment);
+      if (!validation.success) throw new Error(firstValidationMessage(validation));
+
+      await apiRequest("/api/market/repayments", {
+        token,
+        method: "POST",
+        body: validation.data
+      });
+
+      setRepayment({
+        loanId: "",
+        amount: "",
+        bankName: "",
+        accountName: "",
+        accountNumber: "",
+        ifsc: ""
+      });
+      setMessage("Loan repayment recorded from bank account.");
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <div className="market-layout">
+      <section className="market-wallet">
+        <div>
+          <span className="eyebrow">Farmer account</span>
+          <h2>{formatMoney(market.account?.walletBalance || 0)}</h2>
+          <p>Approved loan money is added here. Market purchases reduce this balance.</p>
+        </div>
+        <Wallet size={42} />
+      </section>
+
+      {(error || message) && (
+        <p className={error ? "error-banner" : "success-banner"}>{error || message}</p>
+      )}
+
+      <section className="market-catalog">
+        {Object.entries(groupedCatalog).map(([category, items]) => (
+          <div className="market-category" key={category}>
+            <div className="section-heading compact-heading">
+              <span className="eyebrow">{category}</span>
+              <h2>{category === "Tractor" ? "Tractor and heavy equipment" : `Buy ${category.toLowerCase()}`}</h2>
+            </div>
+            <div className="product-grid">
+              {items.map((item) => (
+                <article className="product-card" key={item.id}>
+                  <div className="product-art" style={{ "--product-tone": item.imageTone }}>
+                    {item.category === "Tractor" ? <Tractor size={30} /> : item.category === "Fertiliser" ? <FlaskConical size={30} /> : <Wheat size={30} />}
+                  </div>
+                  <div className="product-copy">
+                    <h3>{item.name}</h3>
+                    <p>{item.unit}</p>
+                    <strong>{formatMoney(item.price)}</strong>
+                    <span>{item.sourceNote}</span>
+                  </div>
+                  <div className="product-actions">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={quantities[item.id] || 1}
+                      onChange={(event) => setQuantity(item.id, event.target.value)}
+                      aria-label={`${item.name} quantity`}
+                    />
+                    <button className="primary-button" disabled={busy === `buy-${item.id}`} onClick={() => buyItem(item)}>
+                      <ShoppingCart size={17} />
+                      Buy
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <div className="market-bottom-grid">
+        <section className="form-card">
+          <div className="section-heading compact-heading">
+            <span className="eyebrow">Repayment</span>
+            <h2>Pay loan from bank</h2>
+          </div>
+          <form className="stack-form" onSubmit={repayLoan}>
+            <label>
+              Approved loan
+              <select value={repayment.loanId} onChange={(event) => updateRepayment("loanId", event.target.value)} required>
+                <option value="">Select loan</option>
+                {repayableLoans.map((loan) => (
+                  <option key={loan.id} value={loan.id}>
+                    {formatMoney(loan.remainingAmount)} remaining - {loan.purpose}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="form-grid">
+              <label>
+                Amount
+                <span className="input-shell">
+                  <Banknote size={17} />
+                  <input
+                    type="number"
+                    min="1"
+                    value={repayment.amount}
+                    onChange={(event) => updateRepayment("amount", event.target.value)}
+                    required
+                  />
+                </span>
+              </label>
+              <label>
+                Bank name
+                <input value={repayment.bankName} onChange={(event) => updateRepayment("bankName", event.target.value)} required />
+              </label>
+              <label>
+                Account holder
+                <input value={repayment.accountName} onChange={(event) => updateRepayment("accountName", event.target.value)} required />
+              </label>
+              <label>
+                Account number
+                <input
+                  inputMode="numeric"
+                  value={repayment.accountNumber}
+                  onChange={(event) => updateRepayment("accountNumber", event.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                IFSC / bank code
+                <input value={repayment.ifsc} onChange={(event) => updateRepayment("ifsc", event.target.value)} required />
+              </label>
+            </div>
+            <button className="secondary-button" disabled={busy === "repay" || !repayableLoans.length}>
+              <Banknote size={18} />
+              {busy === "repay" ? "Recording" : "Repay loan"}
+            </button>
+          </form>
+        </section>
+
+        <section className="form-card">
+          <div className="section-heading compact-heading">
+            <span className="eyebrow">Orders</span>
+            <h2>Purchase history</h2>
+          </div>
+          {market.orders?.length ? (
+            <div className="order-list">
+              {market.orders.map((order) => (
+                <article className="order-row" key={order.id}>
+                  <div>
+                    <strong>{order.itemName}</strong>
+                    <span>{order.quantity} x {order.unit}</span>
+                  </div>
+                  <div>
+                    <strong>{formatMoney(order.totalPrice)}</strong>
+                    <span>{titleCase(order.status)}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="muted-note">No market orders yet.</p>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
@@ -1631,6 +1899,7 @@ function AdminUserRow({ user, onStatusChange, onPasswordReset, onRemove }) {
       <td>{user.farmName || "-"}</td>
       <td>{user.analysisCount}</td>
       <td>{user.loanCount}</td>
+      <td>{user.orderCount || 0}</td>
       <td>
         {isFarmer ? (
           <form className="password-reset-row" onSubmit={handlePasswordReset}>
@@ -1769,6 +2038,7 @@ function AdminDashboard({ token }) {
           <Metric icon={<FlaskConical size={19} />} label="Reports" value={stats?.totalAnalyses ?? 0} />
           <Metric icon={<Clock3 size={19} />} label="Pending" value={stats?.pending ?? 0} />
           <Metric icon={<HandCoins size={19} />} label="Loan queue" value={stats?.pendingLoans ?? 0} />
+          <Metric icon={<ShoppingCart size={19} />} label="Market orders" value={stats?.totalOrders ?? 0} />
         </div>
       </section>
 
@@ -1840,6 +2110,7 @@ function AdminDashboard({ token }) {
                     <th>Farm</th>
                     <th>Reports</th>
                     <th>Loans</th>
+                    <th>Orders</th>
                     <th>Password</th>
                     <th>Actions</th>
                   </tr>

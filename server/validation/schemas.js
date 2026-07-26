@@ -73,3 +73,17 @@ export const loanStatusSchema = z.object({
   status: z.enum(["pending", "approved", "rejected"]),
   adminNote: z.string().trim().max(700).optional().default("")
 });
+
+export const marketOrderSchema = z.object({
+  itemId: z.string().trim().min(2).max(80),
+  quantity: z.coerce.number().int().min(1).max(100)
+});
+
+export const loanRepaymentSchema = z.object({
+  loanId: z.string().trim().min(12).max(40),
+  amount: z.coerce.number().min(1).max(10000000),
+  bankName: z.string().trim().min(2).max(120),
+  accountName: z.string().trim().min(2).max(120),
+  accountNumber: z.string().trim().regex(/^\d{6,18}$/, "Use 6 to 18 bank account digits."),
+  ifsc: z.string().trim().min(4).max(20).transform((value) => value.toUpperCase())
+});

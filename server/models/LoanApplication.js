@@ -13,7 +13,20 @@ const loanApplicationSchema = new mongoose.Schema(
     status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending", index: true },
     adminNote: { type: String, trim: true, maxlength: 700, default: "" },
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    reviewedAt: Date
+    reviewedAt: Date,
+    creditedAt: Date,
+    repaidAmount: { type: Number, min: 0, default: 0 },
+    repaymentStatus: { type: String, enum: ["not_started", "partial", "paid"], default: "not_started", index: true },
+    repayments: [
+      {
+        amount: { type: Number, required: true, min: 1 },
+        bankName: { type: String, trim: true, maxlength: 120, default: "" },
+        accountName: { type: String, trim: true, maxlength: 120, default: "" },
+        accountLast4: { type: String, trim: true, maxlength: 4, default: "" },
+        ifsc: { type: String, trim: true, maxlength: 20, default: "" },
+        paidAt: { type: Date, default: Date.now }
+      }
+    ]
   },
   { timestamps: true }
 );
@@ -23,6 +36,7 @@ loanApplicationSchema.set("toJSON", {
     delete ret.__v;
     ret.id = ret._id.toString();
     delete ret._id;
+    ret.remainingAmount = Math.max(0, Number(ret.amount || 0) - Number(ret.repaidAmount || 0));
     return ret;
   }
 });
