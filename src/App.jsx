@@ -1731,7 +1731,17 @@ function AiAssistantPanel({ token, latest }) {
         </button>
       </form>
       {error && <p className="error-banner">{error}</p>}
-      {answer && <p className="assistant-answer">{answer}</p>}
+      {answer && (
+        <div className="assistant-answer" aria-live="polite">
+          {answer
+            .split(/\n+/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line, index) => (
+              <p key={`${line}-${index}`}>{line.replace(/^[-*\d.]+\s*/, "")}</p>
+            ))}
+        </div>
+      )}
     </section>
   );
 }

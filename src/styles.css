@@ -898,6 +898,7 @@ textarea:focus {
 
 .tool-card,
 .analytics-summary {
+  min-width: 0;
   padding: 18px;
   border-radius: 8px;
   background: var(--panel);
@@ -907,6 +908,7 @@ textarea:focus {
 
 .assistant-card {
   grid-column: 1 / -1;
+  overflow: visible;
 }
 
 .tool-heading {
@@ -1091,6 +1093,10 @@ textarea:focus {
 }
 
 .assistant-answer {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
   margin: 12px 0 0;
   padding: 13px;
   border-radius: 8px;
@@ -1099,6 +1105,15 @@ textarea:focus {
   color: var(--info-ink);
   line-height: 1.55;
   font-weight: 760;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  white-space: normal;
+}
+
+.assistant-answer p {
+  margin: 0;
+  max-width: 100%;
 }
 
 .market-layout {
