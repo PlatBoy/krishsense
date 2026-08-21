@@ -72,30 +72,70 @@ function parseJsonResponse(text) {
   }
 }
 
+function cropFromQuestion(question, fallbackCrop) {
+  const knownCrops = [
+    "wheat",
+    "cotton",
+    "paddy",
+    "rice",
+    "maize",
+    "sugarcane",
+    "mustard",
+    "potato",
+    "tomato",
+    "onion",
+    "millet",
+    "groundnut"
+  ];
+  const lowerQuestion = String(question || "").toLowerCase();
+  return knownCrops.find((crop) => lowerQuestion.includes(crop)) || fallbackCrop || "your crop";
+}
+
 function localAssistantAnswer(question, context = {}) {
   const soil = context.soilType || "your current soil";
-  const crop = context.crop || "the selected crop";
-  const health = context.healthScore ? ` Your latest soil health score is ${context.healthScore}.` : "";
+  const crop = cropFromQuestion(question, context.crop);
+  const health = context.healthScore ? `Your latest soil health score is ${context.healthScore}. ` : "";
   const lowerQuestion = String(question || "").toLowerCase();
   const lines = [];
 
   if (lowerQuestion.includes("fertil") || lowerQuestion.includes("urea") || lowerQuestion.includes("dap")) {
-    lines.push(`For ${crop} in ${soil}, start with a balanced dose and avoid adding only urea.`);
+    lines.push(`For ${crop} in ${soil}, start with compost or FYM and avoid adding only urea.`);
     lines.push("Use compost/FYM first, then apply NPK in split doses after irrigation or light rain.");
   } else if (lowerQuestion.includes("water") || lowerQuestion.includes("irrigat") || lowerQuestion.includes("rain")) {
-    lines.push(`For ${soil}, irrigate only when the top soil starts drying and the crop shows need.`);
-    lines.push("Avoid watering before heavy rain, and do not keep water standing unless the crop needs it.");
+    lines.push(`For ${crop}, check the top 5 to 8 cm of ${soil} before watering.`);
+    lines.push("If it feels dry, irrigate in the morning or evening; if rain is expected, skip irrigation.");
+    lines.push("Keep water moderate for loamy soil, give shorter gaps for sandy soil, and avoid standing water in clay soil.");
+    lines.push("After rain, drain extra water so roots do not rot.");
   } else if (lowerQuestion.includes("crop") || lowerQuestion.includes("grow")) {
-    lines.push(`${soil} can support good crops if drainage, pH, and organic matter are managed.`);
-    lines.push("Choose crops based on local mandi demand, water availability, and your latest soil report.");
+    lines.push(`To grow ${crop}, prepare a clean field with compost/FYM and use healthy certified seed.`);
+    lines.push("Sow at the right local season, keep proper spacing, and irrigate lightly after sowing.");
+    lines.push("Control weeds early, apply fertilizer in split doses, and watch for pest or leaf colour changes.");
+    lines.push("Use mandi prices and water availability before deciding how much area to plant.");
   } else {
     lines.push(`For ${crop} in ${soil}, follow your soil report first and keep the field evenly moist.`);
     lines.push("Add organic matter, watch for nutrient deficiency, and avoid sudden heavy chemical doses.");
   }
 
   lines.push(`${health}Confirm exact fertilizer and pH correction with a local soil test when possible.`.trim());
-  lines.push("Gemini is not reachable right now, so this is a built-in KrishiSense fallback answer.");
   return lines.join("\n");
+}
+
+function cleanAssistantAnswer(text) {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .split(/\n+/)
+    .map((line) => line.trim().replace(/^[-*\d.]+\s*/, ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function isIncompleteAssistantAnswer(answer) {
+  const clean = cleanAssistantAnswer(answer);
+  const wordCount = clean.split(/\s+/).filter(Boolean).length;
+  const tail = clean.replace(/[^\w\s]$/g, "").trim().split(/\s+/).pop() || "";
+  const badTail = /^(a|an|and|at|by|for|from|in|of|on|or|the|to|with)$/i.test(tail);
+  return wordCount < 24 || badTail || !/[.!?]($|\s)/.test(clean);
 }
 
 export async function analyzeSoilPhoto({ file, input = {}, type = "soil_identifier" }) {
@@ -193,7 +233,8 @@ Question: ${question}
       }
     });
 
-    return (response.text || localAssistantAnswer(question, context)).trim();
+    const answer = cleanAssistantAnswer(response.text);
+    return isIncompleteAssistantAnswer(answer) ? localAssistantAnswer(question, context) : answer;
   } catch {
     return localAssistantAnswer(question, context);
   }

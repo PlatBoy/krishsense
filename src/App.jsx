@@ -338,6 +338,15 @@ function exportOrdersCsv(orders) {
   downloadTextFile(`krishsense-orders-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
 }
 
+function assistantAnswerLines(answer) {
+  return String(answer || "")
+    .replace(/\r/g, "\n")
+    .split(/\n+/)
+    .flatMap((line) => line.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [line])
+    .map((line) => line.trim().replace(/^[-*\d.]+\s*/, ""))
+    .filter(Boolean);
+}
+
 function printAnalysisReport(analysis) {
   const rows = [
     ["Soil type", analysis.result?.soilType],
@@ -1733,13 +1742,9 @@ function AiAssistantPanel({ token, latest }) {
       {error && <p className="error-banner">{error}</p>}
       {answer && (
         <div className="assistant-answer" aria-live="polite">
-          {answer
-            .split(/\n+/)
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .map((line, index) => (
-              <p key={`${line}-${index}`}>{line.replace(/^[-*\d.]+\s*/, "")}</p>
-            ))}
+          {assistantAnswerLines(answer).map((line, index) => (
+            <p key={`${line}-${index}`}>{line}</p>
+          ))}
         </div>
       )}
     </section>
