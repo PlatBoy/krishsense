@@ -6,7 +6,7 @@ import { Analysis } from "../models/Analysis.js";
 import { LoanApplication } from "../models/LoanApplication.js";
 import { MarketOrder } from "../models/MarketOrder.js";
 import { User } from "../models/User.js";
-import { adminPasswordResetSchema, loanStatusSchema, statusSchema, userStatusSchema } from "../validation/schemas.js";
+import { adminPasswordResetSchema, loanStatusSchema, orderStatusSchema, statusSchema, userStatusSchema } from "../validation/schemas.js";
 import { HttpError, notFound } from "../utils/httpError.js";
 
 export const adminRouter = Router();
@@ -23,6 +23,17 @@ function serializeLoan(loan) {
   if (json.user && typeof json.user === "object") {
     json.userId = json.user.id || json.user._id?.toString();
     json.farmerName = json.user.name;
+    json.farmName = json.user.farmName || "";
+    json.farmerEmail = json.user.email || "";
+  }
+  return json;
+}
+
+function serializeOrder(order) {
+  const json = order.toJSON ? order.toJSON() : order;
+  if (json.user && typeof json.user === "object") {
+    json.userId = json.user.id || json.user._id?.toString();
+    json.farmerName = json.user.name || "";
     json.farmName = json.user.farmName || "";
     json.farmerEmail = json.user.email || "";
   }
@@ -81,6 +92,34 @@ adminRouter.get("/stats", async (_req, res, next) => {
         soilCounts: Object.fromEntries(soilCounts.map((item) => [item._id || "Unknown", item.count]))
       }
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get("/orders", async (_req, res, next) => {
+  try {
+    const orders = await MarketOrder.find()
+      .populate("user", "name farmName email")
+      .sort({ createdAt: -1 })
+      .limit(150);
+
+    res.json({ orders: orders.map(serializeOrder) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.patch("/orders/:id/status", validateBody(orderStatusSchema), async (req, res, next) => {
+  try {
+    const order = await MarketOrder.findById(req.params.id);
+    if (!order) throw notFound("Market order not found");
+
+    order.status = req.body.status;
+    await order.save();
+
+    const populated = await order.populate("user", "name farmName email");
+    res.json({ order: serializeOrder(populated) });
   } catch (error) {
     next(error);
   }

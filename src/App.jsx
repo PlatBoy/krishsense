@@ -303,6 +303,41 @@ function exportAnalysesCsv(analyses) {
   downloadTextFile(`krishsense-reports-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
 }
 
+function exportUsersCsv(users) {
+  const header = ["Name", "Email", "Role", "Status", "Farm", "Reports", "Loans", "Orders", "Wallet"];
+  const rows = users.map((user) => [
+    user.name,
+    user.email,
+    titleCase(user.role),
+    user.isActive ? "Active" : "Banned",
+    user.farmName || "",
+    user.analysisCount || 0,
+    user.loanCount || 0,
+    user.orderCount || 0,
+    user.walletBalance || 0
+  ]);
+  const csv = [header, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
+  downloadTextFile(`krishsense-users-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+}
+
+function exportOrdersCsv(orders) {
+  const header = ["Date", "Farmer", "Email", "Item", "Category", "Quantity", "Unit", "Unit Price", "Total", "Status"];
+  const rows = orders.map((order) => [
+    formatDate(order.createdAt),
+    order.farmerName || "",
+    order.farmerEmail || "",
+    order.itemName,
+    order.category,
+    order.quantity,
+    order.unit,
+    order.unitPrice,
+    order.totalPrice,
+    titleCase(order.status)
+  ]);
+  const csv = [header, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
+  downloadTextFile(`krishsense-orders-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+}
+
 function printAnalysisReport(analysis) {
   const rows = [
     ["Soil type", analysis.result?.soilType],
@@ -794,13 +829,15 @@ function FloatingNewsBanner() {
         <Newspaper size={17} />
         Updates
       </div>
-      <div className="news-ticker">
-        {[...newsItems, ...newsItems].map((item, index) => (
-          <span key={`${item.title}-${index}`}>
-            <strong>{item.label}</strong>
-            {item.title}
-          </span>
-        ))}
+      <div className="news-ticker-viewport">
+        <div className="news-ticker">
+          {[...newsItems, ...newsItems].map((item, index) => (
+            <span key={`${item.title}-${index}`}>
+              <strong>{item.label}</strong>
+              {item.title}
+            </span>
+          ))}
+        </div>
       </div>
     </aside>
   );
@@ -1625,9 +1662,20 @@ function AiAssistantPanel({ token, latest }) {
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const quickQuestions = [
+    "What should I do next for this soil?",
+    "Which fertilizer is safe for my crop?",
+    "How should I plan irrigation this week?"
+  ];
 
   async function askAssistant(event) {
     event.preventDefault();
+    const trimmedQuestion = question.trim();
+    if (trimmedQuestion.length < 3) {
+      setError("Ask a farming question with at least 3 characters.");
+      return;
+    }
+
     setBusy(true);
     setError("");
     setAnswer("");
@@ -1636,7 +1684,7 @@ function AiAssistantPanel({ token, latest }) {
         token,
         method: "POST",
         body: {
-          question,
+          question: trimmedQuestion,
           context: {
             soilType: latest?.result?.soilType || "",
             crop: latest?.input?.crop || "",
@@ -1670,7 +1718,14 @@ function AiAssistantPanel({ token, latest }) {
           placeholder="Example: Which fertilizer should I use for wheat in loamy soil?"
           required
         />
-        <button className="primary-button" disabled={busy}>
+        <div className="assistant-quick-row">
+          {quickQuestions.map((item) => (
+            <button className="chip-button" type="button" key={item} onClick={() => setQuestion(item)}>
+              {item}
+            </button>
+          ))}
+        </div>
+        <button className="primary-button" disabled={busy || question.trim().length < 3}>
           <Bot size={17} />
           {busy ? "Thinking" : "Ask assistant"}
         </button>
@@ -2461,21 +2516,24 @@ function AdminDashboard({ token }) {
   const [tab, setTab] = useState("reports");
   const [analyses, setAnalyses] = useState([]);
   const [loans, setLoans] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   async function loadAdminData() {
     setLoading(true);
-    const [analysisData, loanData, userData, statsData] = await Promise.all([
+    const [analysisData, loanData, userData, orderData, statsData] = await Promise.all([
       apiRequest("/api/analyses", { token }),
       apiRequest("/api/loans", { token }),
       apiRequest("/api/admin/users", { token }),
+      apiRequest("/api/admin/orders", { token }),
       apiRequest("/api/admin/stats", { token })
     ]);
     setAnalyses(analysisData.analyses);
     setLoans(loanData.loans);
     setUsers(userData.users);
+    setOrders(orderData.orders);
     setStats(statsData.stats);
     setLoading(false);
   }
@@ -2515,6 +2573,15 @@ function AdminDashboard({ token }) {
     setUsers((current) => current.map((user) => (user.id === id ? data.user : user)));
   }
 
+  async function updateOrderStatus(id, status) {
+    const data = await apiRequest(`/api/admin/orders/${id}/status`, {
+      token,
+      method: "PATCH",
+      body: { status }
+    });
+    setOrders((current) => current.map((order) => (order.id === id ? data.order : order)));
+  }
+
   async function resetUserPassword(id, password) {
     await apiRequest(`/api/admin/users/${id}/password`, {
       token,
@@ -2531,6 +2598,7 @@ function AdminDashboard({ token }) {
     setUsers((current) => current.filter((user) => user.id !== id));
     setAnalyses((current) => current.filter((analysis) => analysis.userId !== id));
     setLoans((current) => current.filter((loan) => loan.userId !== id));
+    setOrders((current) => current.filter((order) => order.userId !== id));
     const statsData = await apiRequest("/api/admin/stats", { token });
     setStats(statsData.stats);
   }
@@ -2565,6 +2633,10 @@ function AdminDashboard({ token }) {
           <HandCoins size={16} />
           Loans
         </button>
+        <button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>
+          <ShoppingCart size={16} />
+          Orders
+        </button>
         <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
           <Users size={16} />
           Users
@@ -2583,18 +2655,7 @@ function AdminDashboard({ token }) {
       ) : (
         <>
           {tab === "reports" && (
-            <div className="history-list">
-              {analyses.length ? (
-                analyses.map((analysis) => (
-                  <AnalysisCard key={analysis.id} analysis={analysis} adminMode onStatusChange={updateStatus} />
-                ))
-              ) : (
-                <div className="empty-state">
-                  <ClipboardList size={34} />
-                  <h3>No farmer reports</h3>
-                </div>
-              )}
-            </div>
+            <AdminReportsPanel analyses={analyses} onStatusChange={updateStatus} />
           )}
 
           {tab === "loans" && (
@@ -2612,52 +2673,277 @@ function AdminDashboard({ token }) {
             </div>
           )}
 
+          {tab === "orders" && <AdminOrdersPanel orders={orders} onStatusChange={updateOrderStatus} />}
+
           {tab === "users" && (
-            <div className="table-shell">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Farm</th>
-                    <th>Reports</th>
-                    <th>Loans</th>
-                    <th>Orders</th>
-                    <th>Password</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <AdminUserRow
-                      key={user.id}
-                      user={user}
-                      onStatusChange={updateUserStatus}
-                      onPasswordReset={resetUserPassword}
-                      onRemove={removeUser}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <section className="history-toolbar">
+                <button className="secondary-button" disabled={!users.length} onClick={() => exportUsersCsv(users)}>
+                  <Download size={17} />
+                  Export users
+                </button>
+              </section>
+              <div className="table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Farm</th>
+                      <th>Reports</th>
+                      <th>Loans</th>
+                      <th>Orders</th>
+                      <th>Password</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((user) => (
+                      <AdminUserRow
+                        key={user.id}
+                        user={user}
+                        onStatusChange={updateUserStatus}
+                        onPasswordReset={resetUserPassword}
+                        onRemove={removeUser}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
 
-          {tab === "analytics" && <AdminAnalyticsPanel analyses={analyses} loans={loans} topSoils={topSoils} stats={stats} />}
+          {tab === "analytics" && <AdminAnalyticsPanel analyses={analyses} loans={loans} orders={orders} topSoils={topSoils} stats={stats} />}
         </>
       )}
     </div>
   );
 }
 
-function AdminAnalyticsPanel({ analyses, loans, topSoils, stats }) {
+function AdminReportsPanel({ analyses, onStatusChange }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState("all");
+  const filteredAnalyses = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return analyses.filter((analysis) => {
+      const matchesStatus = statusFilter === "all" || analysis.status === statusFilter;
+      const matchesRisk = riskFilter === "all" || analysis.result?.riskLevel === riskFilter;
+      const haystack = [
+        analysis.result?.soilType,
+        analysis.result?.summary,
+        analysis.input?.crop,
+        analysis.input?.location,
+        analysis.result?.riskLevel,
+        analysis.farmerName,
+        analysis.farmName
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return matchesStatus && matchesRisk && (!search || haystack.includes(search));
+    });
+  }, [analyses, query, statusFilter, riskFilter]);
+
+  if (!analyses.length) {
+    return (
+      <div className="empty-state">
+        <ClipboardList size={34} />
+        <h3>No farmer reports</h3>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-stack">
+      <section className="history-toolbar">
+        <label>
+          Search
+          <span className="input-shell">
+            <Search size={17} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Farmer, soil, crop, location" />
+          </span>
+        </label>
+        <label>
+          Status
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="all">All</option>
+            <option value="pending">Pending</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="follow_up">Follow up</option>
+          </select>
+        </label>
+        <label>
+          Risk
+          <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value)}>
+            <option value="all">All</option>
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+          </select>
+        </label>
+        <button className="secondary-button" disabled={!filteredAnalyses.length} onClick={() => exportAnalysesCsv(filteredAnalyses)}>
+          <Download size={17} />
+          Export reports
+        </button>
+      </section>
+      {filteredAnalyses.length ? (
+        <div className="history-list">
+          {filteredAnalyses.map((analysis) => (
+            <AnalysisCard key={analysis.id} analysis={analysis} adminMode onStatusChange={onStatusChange} />
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <Search size={34} />
+          <h3>No matching reports</h3>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminOrdersPanel({ orders, onStatusChange }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const categories = useMemo(() => [...new Set(orders.map((order) => order.category).filter(Boolean))].sort(), [orders]);
+  const filteredOrders = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return orders.filter((order) => {
+      const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+      const matchesCategory = categoryFilter === "all" || order.category === categoryFilter;
+      const haystack = [order.itemName, order.category, order.farmerName, order.farmName, order.farmerEmail, order.status]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return matchesStatus && matchesCategory && (!search || haystack.includes(search));
+    });
+  }, [orders, query, statusFilter, categoryFilter]);
+  const revenue = filteredOrders.reduce((total, order) => total + Number(order.totalPrice || 0), 0);
+  const delivered = filteredOrders.filter((order) => order.status === "delivered").length;
+
+  if (!orders.length) {
+    return (
+      <div className="empty-state">
+        <ShoppingCart size={34} />
+        <h3>No market orders</h3>
+        <p>Farmer purchases will appear here for fulfilment tracking.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-stack">
+      <section className="metric-row">
+        <Metric icon={<ShoppingCart size={19} />} label="Filtered orders" value={filteredOrders.length} />
+        <Metric icon={<Wallet size={19} />} label="Order value" value={formatMoney(revenue)} />
+        <Metric icon={<CheckCircle2 size={19} />} label="Delivered" value={delivered} />
+      </section>
+      <section className="history-toolbar">
+        <label>
+          Search
+          <span className="input-shell">
+            <Search size={17} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Farmer, item, category" />
+          </span>
+        </label>
+        <label>
+          Status
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="all">All</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="packed">Packed</option>
+            <option value="delivered">Delivered</option>
+          </select>
+        </label>
+        <label>
+          Category
+          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            <option value="all">All</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="secondary-button" disabled={!filteredOrders.length} onClick={() => exportOrdersCsv(filteredOrders)}>
+          <Download size={17} />
+          Export orders
+        </button>
+      </section>
+      <div className="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Farmer</th>
+              <th>Item</th>
+              <th>Category</th>
+              <th>Qty</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Update</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredOrders.map((order) => (
+              <tr key={order.id}>
+                <td>{formatDate(order.createdAt)}</td>
+                <td>
+                  <strong>{order.farmerName || "Farmer"}</strong>
+                  <span className="table-subtext">{order.farmerEmail || order.farmName || "-"}</span>
+                </td>
+                <td>{order.itemName}</td>
+                <td>{order.category}</td>
+                <td>{order.quantity} {order.unit}</td>
+                <td>{formatMoney(order.totalPrice)}</td>
+                <td><span className={`status-badge ${order.status}`}>{titleCase(order.status)}</span></td>
+                <td>
+                  <select value={order.status} onChange={(event) => onStatusChange(order.id, event.target.value)}>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="packed">Packed</option>
+                    <option value="delivered">Delivered</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!filteredOrders.length && (
+        <div className="empty-state">
+          <Search size={34} />
+          <h3>No matching orders</h3>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminAnalyticsPanel({ analyses, loans, orders, topSoils, stats }) {
   const reportStatus = topEntries(analyses.map((analysis) => analysis.status), 4).map(([label, count]) => [titleCase(label), count]);
   const loanStatus = topEntries(loans.map((loan) => loan.status), 4).map(([label, count]) => [titleCase(label), count]);
+  const orderStatus = topEntries(orders.map((order) => order.status), 4).map(([label, count]) => [titleCase(label), count]);
   const riskMix = topEntries(analyses.map((analysis) => analysis.result?.riskLevel), 4);
+  const pendingWork = [
+    ["Reports to review", analyses.filter((analysis) => analysis.status === "pending").length],
+    ["Loan decisions", loans.filter((loan) => loan.status === "pending").length],
+    ["Orders to deliver", orders.filter((order) => order.status !== "delivered").length]
+  ];
 
   return (
     <div className="analytics-grid">
+      <section className="form-card">
+        <div className="section-heading compact-heading">
+          <span className="eyebrow">Priority queue</span>
+          <h2>Admin work left</h2>
+        </div>
+        <SignalBars entries={pendingWork} emptyLabel="Nothing pending" />
+      </section>
       <section className="form-card">
         <div className="section-heading compact-heading">
           <span className="eyebrow">Soil distribution</span>
@@ -2678,6 +2964,13 @@ function AdminAnalyticsPanel({ analyses, loans, topSoils, stats }) {
           <h2>Loan decisions</h2>
         </div>
         <SignalBars entries={loanStatus} emptyLabel="No loans yet" />
+      </section>
+      <section className="form-card">
+        <div className="section-heading compact-heading">
+          <span className="eyebrow">Market</span>
+          <h2>Order fulfilment</h2>
+        </div>
+        <SignalBars entries={orderStatus} emptyLabel="No market orders yet" />
       </section>
       <section className="form-card">
         <div className="section-heading compact-heading">

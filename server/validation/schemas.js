@@ -79,6 +79,10 @@ export const marketOrderSchema = z.object({
   quantity: z.coerce.number().int().min(1).max(100)
 });
 
+export const orderStatusSchema = z.object({
+  status: z.enum(["confirmed", "packed", "delivered"])
+});
+
 export const loanRepaymentSchema = z.object({
   loanId: z.string().trim().min(12).max(40),
   amount: z.coerce.number().min(1).max(10000000),

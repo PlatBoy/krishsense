@@ -72,6 +72,32 @@ function parseJsonResponse(text) {
   }
 }
 
+function localAssistantAnswer(question, context = {}) {
+  const soil = context.soilType || "your current soil";
+  const crop = context.crop || "the selected crop";
+  const health = context.healthScore ? ` Your latest soil health score is ${context.healthScore}.` : "";
+  const lowerQuestion = String(question || "").toLowerCase();
+  const lines = [];
+
+  if (lowerQuestion.includes("fertil") || lowerQuestion.includes("urea") || lowerQuestion.includes("dap")) {
+    lines.push(`For ${crop} in ${soil}, start with a balanced dose and avoid adding only urea.`);
+    lines.push("Use compost/FYM first, then apply NPK in split doses after irrigation or light rain.");
+  } else if (lowerQuestion.includes("water") || lowerQuestion.includes("irrigat") || lowerQuestion.includes("rain")) {
+    lines.push(`For ${soil}, irrigate only when the top soil starts drying and the crop shows need.`);
+    lines.push("Avoid watering before heavy rain, and do not keep water standing unless the crop needs it.");
+  } else if (lowerQuestion.includes("crop") || lowerQuestion.includes("grow")) {
+    lines.push(`${soil} can support good crops if drainage, pH, and organic matter are managed.`);
+    lines.push("Choose crops based on local mandi demand, water availability, and your latest soil report.");
+  } else {
+    lines.push(`For ${crop} in ${soil}, follow your soil report first and keep the field evenly moist.`);
+    lines.push("Add organic matter, watch for nutrient deficiency, and avoid sudden heavy chemical doses.");
+  }
+
+  lines.push(`${health}Confirm exact fertilizer and pH correction with a local soil test when possible.`.trim());
+  lines.push("Gemini is not reachable right now, so this is a built-in KrishiSense fallback answer.");
+  return lines.join("\n");
+}
+
 export async function analyzeSoilPhoto({ file, input = {}, type = "soil_identifier" }) {
   if (!env.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is required for AI soil photo analysis.");
@@ -139,10 +165,9 @@ Context:
 
 export async function askFarmingAssistant({ question, context = {} }) {
   if (!env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is required for the farming assistant.");
+    return localAssistantAnswer(question, context);
   }
 
-  const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
   const prompt = `
 You are KrishiSense, a practical farming assistant for Indian farmers.
 Answer simply in 4 to 6 short lines. Give safe, practical guidance.
@@ -157,14 +182,19 @@ Farmer context:
 Question: ${question}
 `;
 
-  const response = await ai.models.generateContent({
-    model: env.GEMINI_MODEL,
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    config: {
-      temperature: 0.35,
-      maxOutputTokens: 280
-    }
-  });
+  try {
+    const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+    const response = await ai.models.generateContent({
+      model: env.GEMINI_MODEL,
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.35,
+        maxOutputTokens: 280
+      }
+    });
 
-  return (response.text || "I could not create an answer right now.").trim();
+    return (response.text || localAssistantAnswer(question, context)).trim();
+  } catch {
+    return localAssistantAnswer(question, context);
+  }
 }
