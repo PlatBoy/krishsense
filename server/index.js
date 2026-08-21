@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { adminRouter } from "./routes/admin.js";
 import { analysesRouter } from "./routes/analyses.js";
+import { assistantRouter } from "./routes/assistant.js";
 import { assertProductionEnv, clientOrigins, env } from "./config/env.js";
 import { authRouter } from "./routes/auth.js";
 import { connectDatabase } from "./config/database.js";
@@ -26,7 +27,7 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        connectSrc: ["'self'", ...clientOrigins],
+        connectSrc: ["'self'", "https://api.open-meteo.com", "https://geocoding-api.open-meteo.com", ...clientOrigins],
         imgSrc: ["'self'", "data:", "https:"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
@@ -69,6 +70,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/analyses", analysesRouter);
 app.use("/api/loans", loansRouter);
 app.use("/api/market", marketRouter);
+app.use("/api/assistant", assistantRouter);
 app.use("/api/admin", adminRouter);
 
 app.use(express.static(DIST_DIR));

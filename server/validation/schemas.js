@@ -87,3 +87,16 @@ export const loanRepaymentSchema = z.object({
   accountNumber: z.string().trim().regex(/^\d{6,18}$/, "Use 6 to 18 bank account digits."),
   ifsc: z.string().trim().min(4).max(20).transform((value) => value.toUpperCase())
 });
+
+export const assistantChatSchema = z.object({
+  question: z.string().trim().min(3).max(700),
+  context: z
+    .object({
+      soilType: z.string().trim().max(80).optional().default(""),
+      crop: z.string().trim().max(120).optional().default(""),
+      location: z.string().trim().max(160).optional().default(""),
+      healthScore: z.union([z.string(), z.number()]).optional().default("")
+    })
+    .optional()
+    .default({})
+});

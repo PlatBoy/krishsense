@@ -3,8 +3,12 @@ import {
   Ban,
   BarChart3,
   Banknote,
+  Bell,
+  Bot,
+  Calculator,
   Camera,
   CheckCircle2,
+  CloudSun,
   ClipboardList,
   Clock3,
   Download,
@@ -20,6 +24,7 @@ import {
   Mail,
   MapPin,
   Moon,
+  Newspaper,
   RefreshCw,
   Ruler,
   Search,
@@ -89,6 +94,59 @@ const drainageOptions = [
   ["moderate", "Moderate"],
   ["poor", "Poor"]
 ];
+
+const newsItems = [
+  {
+    label: "Weather",
+    title: "Check rain before irrigation",
+    detail: "Use the weather tool before watering or spraying."
+  },
+  {
+    label: "Mandi",
+    title: "Wheat and paddy demo prices updated",
+    detail: "Compare crop prices before planning storage or sales."
+  },
+  {
+    label: "Scheme",
+    title: "Loan approvals now credit wallet balance",
+    detail: "Approved money can be used in the farmer market."
+  },
+  {
+    label: "Advisory",
+    title: "Download soil reports for records",
+    detail: "Reports can be printed or saved as PDF from History."
+  }
+];
+
+const mandiPrices = [
+  { crop: "Wheat", market: "Delhi", price: 2425, unit: "quintal", trend: "+1.8%" },
+  { crop: "Paddy", market: "Karnal", price: 2310, unit: "quintal", trend: "+0.7%" },
+  { crop: "Maize", market: "Indore", price: 2180, unit: "quintal", trend: "-0.4%" },
+  { crop: "Onion", market: "Nashik", price: 1850, unit: "quintal", trend: "+2.2%" },
+  { crop: "Tomato", market: "Azadpur", price: 1650, unit: "quintal", trend: "-1.1%" },
+  { crop: "Cotton", market: "Rajkot", price: 7020, unit: "quintal", trend: "+0.5%" }
+];
+
+const fertilizerRates = {
+  wheat: { urea: 45, dap: 50, npk: 25 },
+  paddy: { urea: 55, dap: 45, npk: 30 },
+  maize: { urea: 50, dap: 35, npk: 35 },
+  sugarcane: { urea: 75, dap: 55, npk: 55 },
+  cotton: { urea: 40, dap: 35, npk: 45 },
+  default: { urea: 35, dap: 30, npk: 25 }
+};
+
+const cropRecommendationMap = {
+  Clay: ["Paddy", "Wheat", "Sugarcane", "Mustard"],
+  Sandy: ["Groundnut", "Millet", "Watermelon", "Potato"],
+  Loamy: ["Wheat", "Maize", "Vegetables", "Pulses"],
+  Silty: ["Wheat", "Paddy", "Sugarcane", "Lentils"],
+  Peaty: ["Vegetables", "Paddy", "Fodder crops", "Potato"],
+  Chalky: ["Barley", "Mustard", "Gram", "Millet"],
+  Laterite: ["Cashew", "Tea", "Coffee", "Groundnut"],
+  Alluvial: ["Wheat", "Paddy", "Maize", "Sugarcane"],
+  Unknown: ["Upload a soil photo", "Add crop and location", "Ask assistant"]
+};
 
 const loginClientSchema = z.object({
   email: z.string().email("Enter a valid email."),
@@ -219,6 +277,15 @@ function downloadTextFile(filename, content, type = "text/plain;charset=utf-8") 
   URL.revokeObjectURL(url);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function exportAnalysesCsv(analyses) {
   const header = ["Date", "Soil", "Confidence", "Health", "Risk", "Crop", "Land", "Status", "Summary"];
   const rows = analyses.map((analysis) => [
@@ -234,6 +301,84 @@ function exportAnalysesCsv(analyses) {
   ]);
   const csv = [header, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
   downloadTextFile(`krishsense-reports-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+}
+
+function printAnalysisReport(analysis) {
+  const rows = [
+    ["Soil type", analysis.result?.soilType],
+    ["Confidence", `${analysis.result?.confidence || 0}%`],
+    ["Health score", analysis.result?.healthScore],
+    ["Risk", analysis.result?.riskLevel],
+    ["Crop", analysis.input?.crop || "Not set"],
+    ["Location", analysis.input?.location || "Not set"],
+    ["Land", `${analysis.input?.landArea || ""} ${analysis.input?.landUnit || ""}`.trim() || "Not set"],
+    ["Status", titleCase(analysis.status)]
+  ];
+  const recommendations = (analysis.result?.recommendations || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  const nutrients = (analysis.result?.nutrients || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  const html = `<!doctype html>
+<html>
+  <head>
+    <title>KrishiSense Soil Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; color: #17231b; padding: 28px; line-height: 1.45; }
+      h1 { margin: 0 0 4px; color: #21663a; }
+      .muted { color: #667268; margin-top: 0; }
+      table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+      td { border: 1px solid #d9e2d8; padding: 10px; }
+      td:first-child { font-weight: 700; width: 32%; background: #f6f9f4; }
+      section { margin-top: 18px; }
+      li { margin-bottom: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>KrishiSense Soil Report</h1>
+    <p class="muted">${escapeHtml(formatDate(analysis.createdAt))}</p>
+    ${analysis.photoUrl ? `<img src="${escapeHtml(analysis.photoUrl)}" alt="Soil" style="width:180px;height:130px;object-fit:cover;border-radius:8px" />` : ""}
+    <table>${rows.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value ?? "Not available")}</td></tr>`).join("")}</table>
+    <section><h2>Summary</h2><p>${escapeHtml(analysis.result?.summary || "No summary available.")}</p></section>
+    <section><h2>Recommendations</h2><ul>${recommendations || "<li>No recommendations available.</li>"}</ul></section>
+    <section><h2>Nutrients</h2><ul>${nutrients || "<li>No nutrient details available.</li>"}</ul></section>
+    <section><h2>Irrigation</h2><p>${escapeHtml(analysis.result?.irrigation || "No irrigation note available.")}</p></section>
+    <p class="muted">This report is guidance only. Confirm fertilizer and pH decisions with a lab soil test.</p>
+  </body>
+</html>`;
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) {
+    downloadTextFile(`krishsense-report-${analysis.id}.html`, html, "text/html;charset=utf-8");
+    return;
+  }
+  reportWindow.document.write(html);
+  reportWindow.document.close();
+  reportWindow.focus();
+  reportWindow.print();
+}
+
+function getCropRecommendations(analysis) {
+  const aiCrops = analysis?.result?.bestCrops || [];
+  if (aiCrops.length) return aiCrops.slice(0, 5);
+  return cropRecommendationMap[analysis?.result?.soilType] || cropRecommendationMap.Unknown;
+}
+
+function getFertilizerPlan(crop, landArea) {
+  const key = String(crop || "").toLowerCase().trim();
+  const rates = fertilizerRates[key] || fertilizerRates.default;
+  const area = Math.max(0, Number(landArea || 0));
+  return {
+    urea: Math.round(rates.urea * area),
+    dap: Math.round(rates.dap * area),
+    npk: Math.round(rates.npk * area)
+  };
+}
+
+function calculateEmi(amount, annualRate, months) {
+  const principal = Number(amount || 0);
+  const rate = Number(annualRate || 0) / 12 / 100;
+  const tenure = Math.max(1, Number(months || 1));
+  if (!principal) return 0;
+  if (!rate) return Math.round(principal / tenure);
+  const multiplier = (principal * rate * (1 + rate) ** tenure) / ((1 + rate) ** tenure - 1);
+  return Math.round(multiplier);
 }
 
 function topEntries(values, limit = 3) {
@@ -275,6 +420,39 @@ function buildFarmerInsights(analyses, loans) {
     cropCandidates,
     actions: actions.slice(0, 5)
   };
+}
+
+function buildNotifications(analyses, loans, market) {
+  const notifications = [];
+  const latest = analyses[0];
+  if (latest) {
+    notifications.push({
+      title: `${latest.result?.soilType || "Soil"} report saved`,
+      detail: `${latest.result?.healthScore || 0} health score for ${latest.input?.crop || "your field"}.`
+    });
+  }
+  loans
+    .filter((loan) => loan.status !== "pending")
+    .slice(0, 2)
+    .forEach((loan) => {
+      notifications.push({
+        title: `Loan ${loan.status}`,
+        detail: `${formatMoney(loan.amount)} for ${loan.purpose}.`
+      });
+    });
+  (market.orders || []).slice(0, 2).forEach((order) => {
+    notifications.push({
+      title: "Market order confirmed",
+      detail: `${order.quantity} x ${order.itemName} for ${formatMoney(order.totalPrice)}.`
+    });
+  });
+  if (!notifications.length) {
+    notifications.push({
+      title: "Welcome to KrishiSense",
+      detail: "Upload soil photos, apply for loans, and track farm tools here."
+    });
+  }
+  return notifications.slice(0, 5);
 }
 
 const emptyMarketState = {
@@ -598,12 +776,33 @@ function Dashboard({ session, onLogout, theme, onThemeToggle }) {
         </div>
       </header>
 
+      <FloatingNewsBanner />
+
       {session.user.role === "admin" ? (
         <AdminDashboard token={session.token} />
       ) : (
         <FarmerDashboard token={session.token} user={session.user} />
       )}
     </main>
+  );
+}
+
+function FloatingNewsBanner() {
+  return (
+    <aside className="floating-news" aria-label="Farm news and alerts">
+      <div className="floating-news-label">
+        <Newspaper size={17} />
+        Updates
+      </div>
+      <div className="news-ticker">
+        {[...newsItems, ...newsItems].map((item, index) => (
+          <span key={`${item.title}-${index}`}>
+            <strong>{item.label}</strong>
+            {item.title}
+          </span>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -639,6 +838,7 @@ function FarmerDashboard({ token, user }) {
   const pending = analyses.filter((analysis) => analysis.status === "pending").length;
   const pendingLoans = loans.filter((loan) => loan.status === "pending").length;
   const insights = useMemo(() => buildFarmerInsights(analyses, loans), [analyses, loans]);
+  const notifications = useMemo(() => buildNotifications(analyses, loans, market), [analyses, loans, market]);
 
   return (
     <div className="dashboard-grid">
@@ -666,6 +866,10 @@ function FarmerDashboard({ token, user }) {
           <button className={activeView === "insights" ? "active" : ""} onClick={() => setActiveView("insights")}>
             <TrendingUp size={18} />
             Insights
+          </button>
+          <button className={activeView === "tools" ? "active" : ""} onClick={() => setActiveView("tools")}>
+            <Calculator size={18} />
+            Farm tools
           </button>
           <button className={activeView === "market" ? "active" : ""} onClick={() => setActiveView("market")}>
             <ShoppingCart size={18} />
@@ -696,6 +900,7 @@ function FarmerDashboard({ token, user }) {
         {activeView === "identify" && <SoilIdentifierUpload token={token} onCreated={loadAnalyses} />}
         {activeView === "history" && <AnalysisHistory analyses={analyses} loading={loading} />}
         {activeView === "insights" && <FarmerInsightCenter insights={insights} analyses={analyses} />}
+        {activeView === "tools" && <FarmerToolsPanel token={token} analyses={analyses} loans={loans} market={market} notifications={notifications} />}
         {activeView === "market" && <MarketPanel token={token} market={market} onChanged={() => Promise.all([loadMarket(), loadLoans()])} />}
         {activeView === "loans" && <FarmerLoanPanel token={token} loans={loans} onChanged={loadLoans} />}
         {activeView === "account" && <PasswordPanel token={token} />}
@@ -1170,6 +1375,309 @@ function SignalBars({ entries, emptyLabel }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function FarmerToolsPanel({ token, analyses, loans, market, notifications }) {
+  const latest = analyses[0];
+
+  return (
+    <div className="tools-layout">
+      <section className="tools-hero">
+        <div>
+          <span className="eyebrow">Farm command center</span>
+          <h2>Weather, prices, calculators, reports, and assistant</h2>
+        </div>
+        <div className="tools-hero-stats">
+          <InsightTile icon={<Bell size={18} />} label="Notifications" value={notifications.length} />
+          <InsightTile icon={<ShoppingCart size={18} />} label="Orders" value={market.orders?.length || 0} />
+          <InsightTile icon={<HandCoins size={18} />} label="Approved loans" value={loans.filter((loan) => loan.status === "approved").length} />
+        </div>
+      </section>
+
+      <div className="tools-grid">
+        <WeatherTool latest={latest} />
+        <MandiPricePanel />
+        <FertilizerCalculator latest={latest} />
+        <CropRecommendationPanel latest={latest} />
+        <EmiCalculator />
+        <NotificationPanel notifications={notifications} />
+        <AiAssistantPanel token={token} latest={latest} />
+      </div>
+    </div>
+  );
+}
+
+function WeatherTool({ latest }) {
+  const [location, setLocation] = useState(latest?.input?.location || "Delhi");
+  const [weather, setWeather] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function loadWeather(event) {
+    event?.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const place = encodeURIComponent(location.trim() || "Delhi");
+      const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${place}&count=1&language=en&format=json`);
+      const geoData = await geoResponse.json();
+      const match = geoData.results?.[0];
+      if (!match) throw new Error("Location not found.");
+
+      const forecastResponse = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${match.latitude}&longitude=${match.longitude}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m&daily=precipitation_probability_max&forecast_days=1`
+      );
+      const forecast = await forecastResponse.json();
+      setWeather({
+        name: `${match.name}${match.admin1 ? `, ${match.admin1}` : ""}`,
+        temp: Math.round(forecast.current?.temperature_2m || 0),
+        humidity: Math.round(forecast.current?.relative_humidity_2m || 0),
+        rain: Math.round(forecast.daily?.precipitation_probability_max?.[0] || forecast.current?.precipitation || 0),
+        wind: Math.round(forecast.current?.wind_speed_10m || 0)
+      });
+    } catch (err) {
+      setError(err.message || "Weather lookup failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    loadWeather();
+  }, []);
+
+  return (
+    <section className="tool-card weather-card">
+      <div className="tool-heading">
+        <CloudSun size={22} />
+        <div>
+          <span className="eyebrow">Weather</span>
+          <h3>Field forecast</h3>
+        </div>
+      </div>
+      <form className="inline-tool-form" onSubmit={loadWeather}>
+        <input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Village or city" />
+        <button className="small-button" disabled={busy}>
+          <RefreshCw size={15} />
+          {busy ? "Checking" : "Check"}
+        </button>
+      </form>
+      {error && <p className="error-banner">{error}</p>}
+      {weather && (
+        <div className="weather-grid">
+          <strong>{weather.name}</strong>
+          <span>{weather.temp}°C</span>
+          <p>{weather.humidity}% humidity</p>
+          <p>{weather.rain}% rain chance</p>
+          <p>{weather.wind} km/h wind</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MandiPricePanel() {
+  return (
+    <section className="tool-card">
+      <div className="tool-heading">
+        <TrendingUp size={22} />
+        <div>
+          <span className="eyebrow">Mandi prices</span>
+          <h3>Crop price tracker</h3>
+        </div>
+      </div>
+      <div className="mandi-list">
+        {mandiPrices.map((item) => (
+          <div className="mandi-row" key={`${item.crop}-${item.market}`}>
+            <div>
+              <strong>{item.crop}</strong>
+              <span>{item.market}</span>
+            </div>
+            <div>
+              <strong>{formatMoney(item.price)}</strong>
+              <span>per {item.unit} · {item.trend}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="muted-note">Demo benchmark prices for presentation use.</p>
+    </section>
+  );
+}
+
+function FertilizerCalculator({ latest }) {
+  const [crop, setCrop] = useState(latest?.input?.crop || "wheat");
+  const [area, setArea] = useState(latest?.input?.landArea || "1");
+  const plan = getFertilizerPlan(crop, area);
+
+  return (
+    <section className="tool-card">
+      <div className="tool-heading">
+        <FlaskConical size={22} />
+        <div>
+          <span className="eyebrow">Calculator</span>
+          <h3>Fertilizer estimate</h3>
+        </div>
+      </div>
+      <div className="mini-form-grid">
+        <label>
+          Crop
+          <input value={crop} onChange={(event) => setCrop(event.target.value)} />
+        </label>
+        <label>
+          Area acres
+          <input type="number" min="0" step="0.1" value={area} onChange={(event) => setArea(event.target.value)} />
+        </label>
+      </div>
+      <div className="calc-result-grid">
+        <span><strong>{plan.urea} kg</strong> Urea</span>
+        <span><strong>{plan.dap} kg</strong> DAP</span>
+        <span><strong>{plan.npk} kg</strong> NPK</span>
+      </div>
+      <p className="muted-note">Indicative estimate only. Match final dose with local soil test.</p>
+    </section>
+  );
+}
+
+function CropRecommendationPanel({ latest }) {
+  const crops = getCropRecommendations(latest);
+  return (
+    <section className="tool-card">
+      <div className="tool-heading">
+        <Wheat size={22} />
+        <div>
+          <span className="eyebrow">Crop recommendation</span>
+          <h3>{latest?.result?.soilType || "No soil report yet"}</h3>
+        </div>
+      </div>
+      <div className="recommendation-chips">
+        {crops.map((crop) => (
+          <span key={crop}>{crop}</span>
+        ))}
+      </div>
+      <p className="muted-note">Based on latest soil report and built-in soil rules.</p>
+    </section>
+  );
+}
+
+function EmiCalculator() {
+  const [amount, setAmount] = useState("50000");
+  const [rate, setRate] = useState("8");
+  const [months, setMonths] = useState("12");
+  const emi = calculateEmi(amount, rate, months);
+
+  return (
+    <section className="tool-card">
+      <div className="tool-heading">
+        <Calculator size={22} />
+        <div>
+          <span className="eyebrow">Loan calculator</span>
+          <h3>EMI estimate</h3>
+        </div>
+      </div>
+      <div className="mini-form-grid">
+        <label>
+          Amount
+          <input type="number" min="0" step="500" value={amount} onChange={(event) => setAmount(event.target.value)} />
+        </label>
+        <label>
+          Interest %
+          <input type="number" min="0" step="0.1" value={rate} onChange={(event) => setRate(event.target.value)} />
+        </label>
+        <label>
+          Months
+          <input type="number" min="1" value={months} onChange={(event) => setMonths(event.target.value)} />
+        </label>
+      </div>
+      <div className="emi-result">
+        <span>Estimated monthly repayment</span>
+        <strong>{formatMoney(emi)}</strong>
+      </div>
+    </section>
+  );
+}
+
+function NotificationPanel({ notifications }) {
+  return (
+    <section className="tool-card">
+      <div className="tool-heading">
+        <Bell size={22} />
+        <div>
+          <span className="eyebrow">Notifications</span>
+          <h3>Recent activity</h3>
+        </div>
+      </div>
+      <div className="notification-list">
+        {notifications.map((item) => (
+          <p key={`${item.title}-${item.detail}`}>
+            <CheckCircle2 size={16} />
+            <span><strong>{item.title}</strong>{item.detail}</span>
+          </p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AiAssistantPanel({ token, latest }) {
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function askAssistant(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setAnswer("");
+    try {
+      const data = await apiRequest("/api/assistant/chat", {
+        token,
+        method: "POST",
+        body: {
+          question,
+          context: {
+            soilType: latest?.result?.soilType || "",
+            crop: latest?.input?.crop || "",
+            location: latest?.input?.location || "",
+            healthScore: latest?.result?.healthScore || ""
+          }
+        }
+      });
+      setAnswer(data.answer);
+    } catch (err) {
+      setError(err.message || "Assistant failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="tool-card assistant-card">
+      <div className="tool-heading">
+        <Bot size={22} />
+        <div>
+          <span className="eyebrow">AI assistant</span>
+          <h3>Ask a farming question</h3>
+        </div>
+      </div>
+      <form className="assistant-form" onSubmit={askAssistant}>
+        <textarea
+          rows={3}
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          placeholder="Example: Which fertilizer should I use for wheat in loamy soil?"
+          required
+        />
+        <button className="primary-button" disabled={busy}>
+          <Bot size={17} />
+          {busy ? "Thinking" : "Ask assistant"}
+        </button>
+      </form>
+      {error && <p className="error-banner">{error}</p>}
+      {answer && <p className="assistant-answer">{answer}</p>}
+    </section>
   );
 }
 
@@ -1828,6 +2336,12 @@ function AnalysisCard({ analysis, adminMode = false, onStatusChange }) {
           <span>{analysis.result.healthScore} health</span>
           {adminMode && <span>{analysis.farmerName}</span>}
         </div>
+        <div className="analysis-actions">
+          <button className="small-button" onClick={() => printAnalysisReport(analysis)}>
+            <Download size={15} />
+            Save PDF
+          </button>
+        </div>
         {adminMode && (
           <div className="admin-inline">
             <select value={analysis.status} onChange={(event) => onStatusChange(analysis.id, event.target.value)}>
@@ -2055,9 +2569,9 @@ function AdminDashboard({ token }) {
           <Users size={16} />
           Users
         </button>
-        <button className={tab === "soil" ? "active" : ""} onClick={() => setTab("soil")}>
+        <button className={tab === "analytics" ? "active" : ""} onClick={() => setTab("analytics")}>
           <BarChart3 size={16} />
-          Soil mix
+          Analytics
         </button>
       </div>
 
@@ -2130,25 +2644,53 @@ function AdminDashboard({ token }) {
             </div>
           )}
 
-          {tab === "soil" && (
-            <div className="soil-mix-grid">
-              {topSoils.length ? (
-                topSoils.map(([soil, count]) => (
-                  <div className="soil-mix-card" key={soil}>
-                    <strong>{soil}</strong>
-                    <span>{count} report{count === 1 ? "" : "s"}</span>
-                  </div>
-                ))
-              ) : (
-                <div className="empty-state">
-                  <BarChart3 size={34} />
-                  <h3>No soil data</h3>
-                </div>
-              )}
-            </div>
-          )}
+          {tab === "analytics" && <AdminAnalyticsPanel analyses={analyses} loans={loans} topSoils={topSoils} stats={stats} />}
         </>
       )}
+    </div>
+  );
+}
+
+function AdminAnalyticsPanel({ analyses, loans, topSoils, stats }) {
+  const reportStatus = topEntries(analyses.map((analysis) => analysis.status), 4).map(([label, count]) => [titleCase(label), count]);
+  const loanStatus = topEntries(loans.map((loan) => loan.status), 4).map(([label, count]) => [titleCase(label), count]);
+  const riskMix = topEntries(analyses.map((analysis) => analysis.result?.riskLevel), 4);
+
+  return (
+    <div className="analytics-grid">
+      <section className="form-card">
+        <div className="section-heading compact-heading">
+          <span className="eyebrow">Soil distribution</span>
+          <h2>Most common soils</h2>
+        </div>
+        <SignalBars entries={topSoils} emptyLabel="No soil data yet" />
+      </section>
+      <section className="form-card">
+        <div className="section-heading compact-heading">
+          <span className="eyebrow">Report workflow</span>
+          <h2>Review status</h2>
+        </div>
+        <SignalBars entries={reportStatus} emptyLabel="No reports yet" />
+      </section>
+      <section className="form-card">
+        <div className="section-heading compact-heading">
+          <span className="eyebrow">Finance</span>
+          <h2>Loan decisions</h2>
+        </div>
+        <SignalBars entries={loanStatus} emptyLabel="No loans yet" />
+      </section>
+      <section className="form-card">
+        <div className="section-heading compact-heading">
+          <span className="eyebrow">Risk profile</span>
+          <h2>Field risk</h2>
+        </div>
+        <SignalBars entries={riskMix} emptyLabel="No risk data yet" />
+      </section>
+      <section className="analytics-summary">
+        <Metric icon={<Users size={19} />} label="Farmers" value={stats?.farmers ?? 0} />
+        <Metric icon={<ShoppingCart size={19} />} label="Orders" value={stats?.totalOrders ?? 0} />
+        <Metric icon={<CheckCircle2 size={19} />} label="Approved loans" value={stats?.approvedLoans ?? 0} />
+      </section>
     </div>
   );
 }

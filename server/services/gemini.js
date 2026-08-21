@@ -136,3 +136,35 @@ Context:
     raw: parsed
   };
 }
+
+export async function askFarmingAssistant({ question, context = {} }) {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is required for the farming assistant.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  const prompt = `
+You are KrishiSense, a practical farming assistant for Indian farmers.
+Answer simply in 4 to 6 short lines. Give safe, practical guidance.
+Do not claim to replace a government officer, agronomist, bank, or lab test.
+
+Farmer context:
+- Soil type: ${context.soilType || "not provided"}
+- Crop: ${context.crop || "not provided"}
+- Location: ${context.location || "not provided"}
+- Soil health score: ${context.healthScore || "not provided"}
+
+Question: ${question}
+`;
+
+  const response = await ai.models.generateContent({
+    model: env.GEMINI_MODEL,
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: {
+      temperature: 0.35,
+      maxOutputTokens: 280
+    }
+  });
+
+  return (response.text || "I could not create an answer right now.").trim();
+}
