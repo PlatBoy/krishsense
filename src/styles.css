@@ -456,6 +456,65 @@ textarea:focus {
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
 }
 
+.lang-switch {
+  position: relative;
+}
+
+.lang-switch-trigger {
+  min-height: 44px;
+  min-width: 76px;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green-dark);
+  background: var(--button-muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-weight: 900;
+}
+
+.lang-switch-trigger:hover {
+  background: var(--button-muted-strong);
+}
+
+.lang-switch-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 128px;
+  padding: 6px;
+  margin: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+  background: var(--topbar-bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+  z-index: 20;
+}
+
+.lang-switch-menu button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--green-dark);
+  font-weight: 750;
+  text-align: left;
+}
+
+.lang-switch-menu button:hover {
+  background: var(--button-muted);
+}
+
+.lang-switch-menu button.active {
+  background: var(--chip-bg);
+  font-weight: 900;
+}
+
 .error-banner,
 .success-banner {
   margin: 0 0 14px;
