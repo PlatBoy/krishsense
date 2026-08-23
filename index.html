@@ -7,47 +7,57 @@
     <style>
       .krishsense-language-control {
         position: fixed;
-        top: 16px;
-        right: 16px;
-        z-index: 2147483647;
+        top: 18px;
+        right: 18px;
+        z-index: 99999;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 7px 10px;
-        border: 1px solid rgba(33, 102, 58, 0.2);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.94);
-        box-shadow: 0 8px 24px rgba(20, 50, 30, 0.12);
-        backdrop-filter: blur(10px);
-        font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        gap: 7px;
+        padding: 4px 8px 4px 10px;
+        border: 1px solid rgba(33, 102, 58, .16);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, .96);
+        box-shadow: 0 5px 18px rgba(20, 50, 30, .14);
+        backdrop-filter: blur(12px);
       }
-      .krishsense-language-control span { font-size: 16px; }
+      .krishsense-language-icon {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: #eef7ef;
+        font-size: 15px;
+      }
       .krishsense-language-control select {
+        min-width: 105px;
+        padding: 7px 24px 7px 3px;
         border: 0;
         outline: 0;
         background: transparent;
         color: #173b25;
-        font: inherit;
+        font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         cursor: pointer;
       }
       #google_translate_element {
-        position: absolute !important;
+        position: fixed !important;
+        left: -10000px !important;
+        top: -10000px !important;
         width: 1px !important;
         height: 1px !important;
         overflow: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
       }
       .goog-te-banner-frame.skiptranslate { display: none !important; }
       body { top: 0 !important; }
       @media (max-width: 700px) {
         .krishsense-language-control { top: 10px; right: 10px; }
+        .krishsense-language-control select { min-width: 92px; }
       }
     </style>
   </head>
   <body>
     <div class="krishsense-language-control" aria-label="Language selector">
-      <span aria-hidden="true">🌐</span>
+      <span class="krishsense-language-icon" aria-hidden="true">🌐</span>
       <label for="krishsense-language" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Language</label>
       <select id="krishsense-language">
         <option value="en">English</option>
@@ -62,23 +72,63 @@
         <option value="ml">മലയാളം</option>
       </select>
     </div>
+
     <div id="google_translate_element" aria-hidden="true"></div>
     <div id="root"></div>
+
     <script>
       (function () {
         var select = document.getElementById('krishsense-language');
-        var cookieMatch = document.cookie.match(/(?:^|; )googtrans=([^;]+)/);
-        var current = cookieMatch ? decodeURIComponent(cookieMatch[1]).split('/').pop() : 'en';
-        if (select && [...select.options].some(function (option) { return option.value === current; })) {
-          select.value = current;
+
+        function getSavedLanguage() {
+          var match = document.cookie.match(/(?:^|;\s*)googtrans=([^;]+)/);
+          if (!match) return 'en';
+          try {
+            var value = decodeURIComponent(match[1]);
+            var parts = value.split('/');
+            return parts[parts.length - 1] || 'en';
+          } catch (_) {
+            return 'en';
+          }
         }
 
-        select?.addEventListener('change', function (event) {
-          var language = event.target.value;
-          document.cookie = 'googtrans=/en/' + language + ';path=/';
-          document.cookie = 'googtrans=/en/' + language + ';path=/;SameSite=Lax';
-          window.location.reload();
-        });
+        function setGoogleLanguage(language) {
+          var combo = document.querySelector('.goog-te-combo');
+          if (!combo) return false;
+          combo.value = language;
+          combo.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+
+        function applyLanguage(language) {
+          if (language === 'en') {
+            document.cookie = 'googtrans=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+            document.cookie = 'googtrans=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + location.hostname;
+            window.location.reload();
+            return;
+          }
+
+          var attempts = 0;
+          function tryApply() {
+            if (setGoogleLanguage(language)) return;
+            attempts += 1;
+            if (attempts < 30) window.setTimeout(tryApply, 250);
+          }
+          tryApply();
+        }
+
+        if (select) {
+          var saved = getSavedLanguage();
+          if ([...select.options].some(function (option) { return option.value === saved; })) {
+            select.value = saved;
+          }
+
+          select.addEventListener('change', function (event) {
+            var language = event.target.value;
+            document.cookie = 'googtrans=/en/' + language + ';path=/;SameSite=Lax';
+            applyLanguage(language);
+          });
+        }
 
         window.googleTranslateElementInit = function () {
           if (!window.google || !window.google.translate) return;
@@ -87,6 +137,9 @@
             includedLanguages: 'en,hi,pa,mr,bn,gu,ta,te,kn,ml',
             autoDisplay: false
           }, 'google_translate_element');
+
+          var saved = getSavedLanguage();
+          if (saved !== 'en') window.setTimeout(function () { setGoogleLanguage(saved); }, 500);
         };
       })();
     </script>
