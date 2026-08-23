@@ -4,9 +4,93 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KrishiSense</title>
+    <style>
+      .krishsense-language-control {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border: 1px solid rgba(33, 102, 58, 0.2);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 8px 24px rgba(20, 50, 30, 0.12);
+        backdrop-filter: blur(10px);
+        font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .krishsense-language-control span { font-size: 16px; }
+      .krishsense-language-control select {
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: #173b25;
+        font: inherit;
+        cursor: pointer;
+      }
+      #google_translate_element {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      .goog-te-banner-frame.skiptranslate { display: none !important; }
+      body { top: 0 !important; }
+      @media (max-width: 700px) {
+        .krishsense-language-control { top: 10px; right: 10px; }
+      }
+    </style>
   </head>
   <body>
+    <div class="krishsense-language-control" aria-label="Language selector">
+      <span aria-hidden="true">🌐</span>
+      <label for="krishsense-language" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Language</label>
+      <select id="krishsense-language">
+        <option value="en">English</option>
+        <option value="hi">हिन्दी</option>
+        <option value="pa">ਪੰਜਾਬੀ</option>
+        <option value="mr">मराठी</option>
+        <option value="bn">বাংলা</option>
+        <option value="gu">ગુજરાતી</option>
+        <option value="ta">தமிழ்</option>
+        <option value="te">తెలుగు</option>
+        <option value="kn">ಕನ್ನಡ</option>
+        <option value="ml">മലയാളം</option>
+      </select>
+    </div>
+    <div id="google_translate_element" aria-hidden="true"></div>
     <div id="root"></div>
+    <script>
+      (function () {
+        var select = document.getElementById('krishsense-language');
+        var cookieMatch = document.cookie.match(/(?:^|; )googtrans=([^;]+)/);
+        var current = cookieMatch ? decodeURIComponent(cookieMatch[1]).split('/').pop() : 'en';
+        if (select && [...select.options].some(function (option) { return option.value === current; })) {
+          select.value = current;
+        }
+
+        select?.addEventListener('change', function (event) {
+          var language = event.target.value;
+          document.cookie = 'googtrans=/en/' + language + ';path=/';
+          document.cookie = 'googtrans=/en/' + language + ';path=/;SameSite=Lax';
+          window.location.reload();
+        });
+
+        window.googleTranslateElementInit = function () {
+          if (!window.google || !window.google.translate) return;
+          new window.google.translate.TranslateElement({
+            pageLanguage: 'en',
+            includedLanguages: 'en,hi,pa,mr,bn,gu,ta,te,kn,ml',
+            autoDisplay: false
+          }, 'google_translate_element');
+        };
+      })();
+    </script>
+    <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
