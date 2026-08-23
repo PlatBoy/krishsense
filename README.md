@@ -22,3 +22,7 @@ Create these before deploying:
 
 admin@krishsense.app
 admin123456
+
+
+rakes2123@gmail.com
+12345678
