@@ -15,7 +15,9 @@ import {
   Droplets,
   FlaskConical,
   Gauge,
+  Globe,
   HandCoins,
+  ChevronDown,
   Image as ImageIcon,
   KeyRound,
   Leaf,
@@ -43,11 +45,18 @@ import {
   Users,
   Wheat
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
 const SESSION_KEY = "krishsense-session";
 const THEME_KEY = "krishsense-theme";
+const LANG_KEY = "krishsense-lang";
+
+const LANGUAGES = [
+  { code: "en", label: "EN", name: "English" },
+  { code: "hi", label: "HI", name: "हिंदी" },
+  { code: "mr", label: "MR", name: "मराठी" }
+];
 const fieldImage =
   "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80";
 
@@ -249,6 +258,16 @@ function formatMoney(value) {
     currency: "INR",
     maximumFractionDigits: 0
   }).format(Number(value || 0));
+}
+
+function getInitialLanguage() {
+  try {
+    const savedLang = localStorage.getItem(LANG_KEY);
+    if (LANGUAGES.some((lang) => lang.code === savedLang)) return savedLang;
+  } catch {
+    return "en";
+  }
+  return "en";
 }
 
 function getInitialTheme() {
@@ -515,12 +534,18 @@ function App() {
     }
   });
   const [theme, setTheme] = useState(getInitialTheme);
+  const [language, setLanguage] = useState(getInitialLanguage);
   const [booting, setBooting] = useState(Boolean(session?.token));
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+    localStorage.setItem(LANG_KEY, language);
+  }, [language]);
 
   useEffect(() => {
     if (!session?.token) {
@@ -559,7 +584,13 @@ function App() {
   if (!session) {
     return (
       <>
-        <LoginView onLogin={handleLogin} theme={theme} onThemeToggle={() => setTheme((current) => (current === "dark" ? "light" : "dark"))} />
+        <LoginView
+          onLogin={handleLogin}
+          theme={theme}
+          onThemeToggle={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+          language={language}
+          onLanguageChange={setLanguage}
+        />
         <AppFooter />
       </>
     );
@@ -572,6 +603,8 @@ function App() {
         onLogout={handleLogout}
         theme={theme}
         onThemeToggle={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+        language={language}
+        onLanguageChange={setLanguage}
       />
       <AppFooter />
     </>
@@ -606,7 +639,58 @@ function ThemeSwitch({ theme, onToggle }) {
   );
 }
 
-function LoginView({ onLogin, theme, onThemeToggle }) {
+function LanguageSwitcher({ language, onChange }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const current = LANGUAGES.find((lang) => lang.code === language) || LANGUAGES[0];
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="lang-switch" ref={rootRef}>
+      <button
+        className="lang-switch-trigger"
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Change language"
+      >
+        <Globe size={16} />
+        <span>{current.label}</span>
+        <ChevronDown size={14} />
+      </button>
+      {open && (
+        <ul className="lang-switch-menu" role="listbox">
+          {LANGUAGES.map((lang) => (
+            <li key={lang.code}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={lang.code === language}
+                className={lang.code === language ? "active" : ""}
+                onClick={() => {
+                  onChange(lang.code);
+                  setOpen(false);
+                }}
+              >
+                {lang.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function LoginView({ onLogin, theme, onThemeToggle, language, onLanguageChange }) {
   const [mode, setMode] = useState("login");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -689,6 +773,7 @@ function LoginView({ onLogin, theme, onThemeToggle }) {
 
       <section className="auth-panel">
         <div className="auth-panel-actions">
+          <LanguageSwitcher language={language} onChange={onLanguageChange} />
           <ThemeSwitch theme={theme} onToggle={onThemeToggle} />
         </div>
 
@@ -795,7 +880,7 @@ function LoginView({ onLogin, theme, onThemeToggle }) {
   );
 }
 
-function Dashboard({ session, onLogout, theme, onThemeToggle }) {
+function Dashboard({ session, onLogout, theme, onThemeToggle, language, onLanguageChange }) {
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -809,6 +894,7 @@ function Dashboard({ session, onLogout, theme, onThemeToggle }) {
           </div>
         </div>
         <div className="topbar-actions">
+          <LanguageSwitcher language={language} onChange={onLanguageChange} />
           <ThemeSwitch theme={theme} onToggle={onThemeToggle} />
           <span className="user-pill">
             {session.user.role === "admin" ? <ShieldCheck size={16} /> : <Wheat size={16} />}
