@@ -226,6 +226,17 @@ const loanRepaymentClientSchema = z.object({
   ifsc: z.string().trim().min(4, "IFSC or bank code is required.")
 });
 
+const diseaseClientSchema = z.object({
+  crop: z.string().trim().min(1, "Crop is required."),
+  photo: z.instanceof(File, { message: "Upload a crop photo." })
+});
+
+const insuranceClientSchema = z.object({
+  crop: z.string().trim().min(1, "Crop is required."),
+  coverageAmount: z.coerce.number().min(1000, "Enter at least 1000."),
+  damageType: z.string().min(1, "Select damage type.")
+});
+
 function firstValidationMessage(result) {
   return result.success ? "" : result.error.issues[0]?.message || "Please check the form.";
 }
@@ -339,7 +350,7 @@ function exportAnalysesCsv(analyses) {
 }
 
 function exportUsersCsv(users) {
-  const header = ["Name", "Email", "Role", "Status", "Farm", "Reports", "Loans", "Orders", "Wallet"];
+  const header = ["Name", "Email", "Role", "Status", "Farm", "Reports", "Diseases", "Loans", "Insurance", "Orders", "Wallet"];
   const rows = users.map((user) => [
     user.name,
     user.email,
@@ -347,7 +358,9 @@ function exportUsersCsv(users) {
     user.isActive ? "Active" : "Banned",
     user.farmName || "",
     user.analysisCount || 0,
+    user.diseaseCount || 0,
     user.loanCount || 0,
+    user.insuranceCount || 0,
     user.orderCount || 0,
     user.walletBalance || 0
   ]);
@@ -957,6 +970,8 @@ function FloatingNewsBanner() {
 function FarmerDashboard({ token, user, language }) {
   const [activeView, setActiveView] = useState("analysis");
   const [analyses, setAnalyses] = useState([]);
+  const [diseases, setDiseases] = useState([]);
+  const [insurance, setInsurance] = useState([]);
   const [loans, setLoans] = useState([]);
   const [market, setMarket] = useState(emptyMarketState);
   const [loading, setLoading] = useState(true);
@@ -978,8 +993,18 @@ function FarmerDashboard({ token, user, language }) {
     setMarket(data);
   }
 
+  async function loadDiseases() {
+    const data = await apiRequest("/api/diseases", { token });
+    setDiseases(data.diseases);
+  }
+
+  async function loadInsurance() {
+    const data = await apiRequest("/api/insurance", { token });
+    setInsurance(data.insurance);
+  }
+
   useEffect(() => {
-    Promise.all([loadAnalyses(), loadLoans(), loadMarket()]).catch(() => setLoading(false));
+    Promise.all([loadAnalyses(), loadLoans(), loadMarket(), loadDiseases(), loadInsurance()]).catch(() => setLoading(false));
   }, []);
 
   const latest = analyses[0];
@@ -1011,6 +1036,10 @@ function FarmerDashboard({ token, user, language }) {
             <ClipboardList size={18} />
             History
           </button>
+          <button className={activeView === "disease" ? "active" : ""} onClick={() => setActiveView("disease")}>
+            <AlertTriangle size={18} />
+            Disease detect
+          </button>
           <button className={activeView === "insights" ? "active" : ""} onClick={() => setActiveView("insights")}>
             <TrendingUp size={18} />
             Insights
@@ -1027,6 +1056,10 @@ function FarmerDashboard({ token, user, language }) {
             <HandCoins size={18} />
             Loans
           </button>
+          <button className={activeView === "insurance" ? "active" : ""} onClick={() => setActiveView("insurance")}>
+            <ShieldCheck size={18} />
+            Insurance
+          </button>
           <button className={activeView === "account" ? "active" : ""} onClick={() => setActiveView("account")}>
             <KeyRound size={18} />
             Account
@@ -1039,6 +1072,7 @@ function FarmerDashboard({ token, user, language }) {
           <Metric icon={<FlaskConical size={19} />} label="Analyses" value={analyses.length} />
           <Metric icon={<Clock3 size={19} />} label="Pending review" value={pending} />
           <Metric icon={<Leaf size={19} />} label="Latest soil" value={latest?.result.soilType || "None"} />
+          <Metric icon={<AlertTriangle size={19} />} label="Disease checks" value={diseases.length} />
           <Metric icon={<HandCoins size={19} />} label="Loan requests" value={pendingLoans ? `${pendingLoans} pending` : loans.length} />
           <Metric icon={<TrendingUp size={19} />} label="Avg health" value={insights.averageHealth ?? "None"} />
           <Metric icon={<Wallet size={19} />} label="Balance" value={formatMoney(market.account?.walletBalance || 0)} />
@@ -1047,12 +1081,14 @@ function FarmerDashboard({ token, user, language }) {
         {activeView === "analysis" && <SoilAnalysisForm token={token} onCreated={loadAnalyses} />}
         {activeView === "identify" && <SoilIdentifierUpload token={token} onCreated={loadAnalyses} />}
         {activeView === "history" && <AnalysisHistory analyses={analyses} loading={loading} />}
+        {activeView === "disease" && <DiseaseDetectionPanel token={token} diseases={diseases} onChanged={loadDiseases} />}
         {activeView === "insights" && <FarmerInsightCenter insights={insights} analyses={analyses} />}
         {activeView === "tools" && (
           <FarmerToolsPanel token={token} analyses={analyses} loans={loans} market={market} notifications={notifications} language={language} />
         )}
         {activeView === "market" && <MarketPanel token={token} market={market} onChanged={() => Promise.all([loadMarket(), loadLoans()])} />}
         {activeView === "loans" && <FarmerLoanPanel token={token} loans={loans} onChanged={loadLoans} />}
+        {activeView === "insurance" && <InsurancePanel token={token} insurance={insurance} onChanged={loadInsurance} />}
         {activeView === "account" && <PasswordPanel token={token} />}
       </section>
     </div>
@@ -1857,6 +1893,168 @@ function AiAssistantPanel({ token, latest, language }) {
   );
 }
 
+function DiseaseDetectionPanel({ token, diseases, onChanged }) {
+  const [form, setForm] = useState({ crop: "", location: "", symptoms: "", notes: "", photo: null });
+  const [preview, setPreview] = useState("");
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function handlePhoto(file) {
+    updateField("photo", file);
+    setPreview(file ? URL.createObjectURL(file) : "");
+  }
+
+  async function submitDisease(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const validation = diseaseClientSchema.safeParse(form);
+      if (!validation.success) throw new Error(firstValidationMessage(validation));
+
+      const payload = new FormData();
+      payload.append("crop", form.crop);
+      payload.append("location", form.location);
+      payload.append("symptoms", form.symptoms);
+      payload.append("notes", form.notes);
+      payload.append("photo", form.photo);
+
+      const data = await apiRequest("/api/diseases", { token, method: "POST", body: payload });
+      setResult(data.result);
+      setMessage("Disease detection completed and saved.");
+      setForm({ crop: "", location: "", symptoms: "", notes: "", photo: null });
+      setPreview("");
+      await onChanged();
+    } catch (err) {
+      setError(err.message || "Disease detection failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="work-surface">
+      <section className="form-card">
+        <div className="section-heading">
+          <span className="eyebrow">Crop health</span>
+          <h2>AI disease detection</h2>
+        </div>
+        {error && <p className="error-banner">{error}</p>}
+        {message && <p className="success-banner">{message}</p>}
+
+        <form className="analysis-form" onSubmit={submitDisease}>
+          <div className="upload-zone">
+            {preview ? <img src={preview} alt="Crop preview" /> : <ImageIcon size={42} />}
+            <label className="upload-button">
+              <Upload size={18} />
+              Upload crop photo
+              <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => handlePhoto(event.target.files?.[0] || null)} hidden />
+            </label>
+          </div>
+          <div className="form-grid">
+            <label>
+              Crop
+              <span className="input-shell">
+                <Wheat size={17} />
+                <input value={form.crop} onChange={(event) => updateField("crop", event.target.value)} placeholder="Tomato, wheat, cotton" required />
+              </span>
+            </label>
+            <label>
+              Location
+              <span className="input-shell">
+                <MapPin size={17} />
+                <input value={form.location} onChange={(event) => updateField("location", event.target.value)} placeholder="Village or district" />
+              </span>
+            </label>
+          </div>
+          <label>
+            Visible symptoms
+            <textarea value={form.symptoms} onChange={(event) => updateField("symptoms", event.target.value)} rows={3} placeholder="Yellow spots, wilting, curled leaves..." />
+          </label>
+          <label>
+            Notes
+            <textarea value={form.notes} onChange={(event) => updateField("notes", event.target.value)} rows={2} placeholder="When it started, recent spray, rainfall, etc." />
+          </label>
+          <button className="primary-button" disabled={busy}>
+            <AlertTriangle size={18} />
+            {busy ? "Analyzing" : "Detect disease"}
+          </button>
+        </form>
+      </section>
+
+      {result && <DiseaseResultCard disease={{ result, createdAt: new Date().toISOString() }} />}
+      <DiseaseList diseases={diseases} />
+    </div>
+  );
+}
+
+function DiseaseList({ diseases }) {
+  if (!diseases.length) {
+    return (
+      <div className="empty-state">
+        <AlertTriangle size={36} />
+        <h3>No disease reports yet</h3>
+        <p>Upload a crop photo to detect possible disease or pest stress.</p>
+      </div>
+    );
+  }
+
+  return (
+    <section className="loan-list" aria-label="Disease reports">
+      {diseases.map((disease) => (
+        <DiseaseResultCard key={disease.id} disease={disease} />
+      ))}
+    </section>
+  );
+}
+
+function DiseaseResultCard({ disease }) {
+  const result = disease.result || {};
+  return (
+    <article className="loan-card">
+      <div className="loan-card-header">
+        <div>
+          <span>{formatDate(disease.createdAt)}</span>
+          <h3>{result.diseaseName || "Unknown disease"}</h3>
+        </div>
+        <span className={`status-badge ${String(result.severity || "medium").toLowerCase()}`}>{result.severity || "Medium"} risk</span>
+      </div>
+      {disease.photoUrl && <img className="analysis-photo" src={disease.photoUrl} alt="Crop disease report" />}
+      <p>{result.summary || "No summary available."}</p>
+      <div className="analysis-tags">
+        <span>{result.crop || disease.input?.crop || "Crop"}</span>
+        <span>{Number(result.confidence || 0).toFixed(0)}% confidence</span>
+        {disease.farmerName && <span>{disease.farmerName}</span>}
+      </div>
+      <RecommendationList title="Urgent actions" items={result.urgentActions} />
+      <RecommendationList title="Treatment" items={result.treatments} />
+      <RecommendationList title="Prevention" items={result.prevention} />
+      {result.note && <p className="muted-note">{result.note}</p>}
+    </article>
+  );
+}
+
+function RecommendationList({ title, items = [] }) {
+  if (!items?.length) return null;
+  return (
+    <div className="recommendation-block">
+      <strong>{title}</strong>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function MarketPanel({ token, market, onChanged }) {
   const [quantities, setQuantities] = useState({});
   const [repayment, setRepayment] = useState({
@@ -2317,6 +2515,203 @@ function LoanCard({ loan, adminMode = false, onDecision }) {
   );
 }
 
+function InsurancePanel({ token, insurance, onChanged }) {
+  const [form, setForm] = useState({
+    crop: "",
+    landArea: "",
+    landUnit: "acre",
+    season: "",
+    location: "",
+    coverageAmount: "",
+    damageType: "drought",
+    farmerNote: ""
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submitInsurance(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const validation = insuranceClientSchema.safeParse(form);
+      if (!validation.success) throw new Error(firstValidationMessage(validation));
+
+      await apiRequest("/api/insurance", {
+        token,
+        method: "POST",
+        body: form
+      });
+
+      setForm({
+        crop: "",
+        landArea: "",
+        landUnit: "acre",
+        season: "",
+        location: "",
+        coverageAmount: "",
+        damageType: "drought",
+        farmerNote: ""
+      });
+      setMessage("Insurance application submitted for admin review.");
+      await onChanged();
+    } catch (err) {
+      setError(err.message || "Insurance application failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="work-surface">
+      <section className="form-card">
+        <div className="section-heading">
+          <span className="eyebrow">Crop insurance</span>
+          <h2>Apply for crop cover</h2>
+        </div>
+        {error && <p className="error-banner">{error}</p>}
+        {message && <p className="success-banner">{message}</p>}
+
+        <form className="analysis-form" onSubmit={submitInsurance}>
+          <div className="form-grid">
+            <label>
+              Crop
+              <input value={form.crop} onChange={(event) => updateField("crop", event.target.value)} required />
+            </label>
+            <label>
+              Coverage amount
+              <span className="input-shell">
+                <ShieldCheck size={17} />
+                <input type="number" min="1000" step="500" value={form.coverageAmount} onChange={(event) => updateField("coverageAmount", event.target.value)} required />
+              </span>
+            </label>
+            <label>
+              Damage type
+              <select value={form.damageType} onChange={(event) => updateField("damageType", event.target.value)}>
+                <option value="drought">Drought</option>
+                <option value="flood">Flood</option>
+                <option value="pest">Pest</option>
+                <option value="disease">Disease</option>
+                <option value="hail">Hail</option>
+                <option value="fire">Fire</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>
+              Season
+              <input value={form.season} onChange={(event) => updateField("season", event.target.value)} placeholder="Kharif 2026" />
+            </label>
+            <label>
+              Land area
+              <span className="input-shell split-input">
+                <Ruler size={17} />
+                <input type="number" min="0" step="0.01" value={form.landArea} onChange={(event) => updateField("landArea", event.target.value)} />
+                <select value={form.landUnit} onChange={(event) => updateField("landUnit", event.target.value)}>
+                  <option value="acre">Acre</option>
+                  <option value="hectare">Hectare</option>
+                  <option value="bigha">Bigha</option>
+                </select>
+              </span>
+            </label>
+            <label>
+              Location
+              <input value={form.location} onChange={(event) => updateField("location", event.target.value)} placeholder="Village or district" />
+            </label>
+          </div>
+          <label>
+            Farmer note
+            <textarea value={form.farmerNote} onChange={(event) => updateField("farmerNote", event.target.value)} rows={3} placeholder="Loss details or insurance reason" />
+          </label>
+          <button className="primary-button" disabled={busy}>
+            <ShieldCheck size={18} />
+            {busy ? "Submitting" : "Submit insurance"}
+          </button>
+        </form>
+      </section>
+
+      <InsuranceList insurance={insurance} />
+    </div>
+  );
+}
+
+function InsuranceList({ insurance, adminMode = false, onDecision }) {
+  if (!insurance.length) {
+    return (
+      <div className="empty-state">
+        <ShieldCheck size={36} />
+        <h3>No insurance applications</h3>
+        <p>Crop insurance requests and decisions will appear here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <section className="loan-list" aria-label="Insurance applications">
+      {insurance.map((item) => (
+        <InsuranceCard key={item.id} insurance={item} adminMode={adminMode} onDecision={onDecision} />
+      ))}
+    </section>
+  );
+}
+
+function InsuranceCard({ insurance, adminMode = false, onDecision }) {
+  const [adminNote, setAdminNote] = useState(insurance.adminNote || "");
+  const [busy, setBusy] = useState(false);
+
+  async function decide(status) {
+    if (!onDecision) return;
+    setBusy(true);
+    try {
+      await onDecision(insurance.id, status, adminNote);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <article className="loan-card">
+      <div className="loan-card-header">
+        <div>
+          <span>{formatDate(insurance.createdAt)}</span>
+          <h3>{formatMoney(insurance.coverageAmount)}</h3>
+        </div>
+        <span className={`status-badge ${insurance.status}`}>{titleCase(insurance.status)}</span>
+      </div>
+      <p>{insurance.crop} cover for {titleCase(insurance.damageType || "other")} risk</p>
+      <div className="analysis-tags">
+        <span>{insurance.landArea ? `${insurance.landArea} ${insurance.landUnit}` : "Land not set"}</span>
+        <span>{insurance.season || "Season not set"}</span>
+        <span>{insurance.location || "Location not set"}</span>
+        {adminMode && <span>{insurance.farmerName}</span>}
+      </div>
+      {insurance.farmerNote && <p className="loan-note">{insurance.farmerNote}</p>}
+      {insurance.adminNote && <p className="loan-note admin-note">{insurance.adminNote}</p>}
+
+      {adminMode && (
+        <div className="loan-actions">
+          <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} rows={2} placeholder="Admin note" />
+          <div className="action-row">
+            <button className="secondary-button" disabled={busy} onClick={() => decide("approved")}>
+              <CheckCircle2 size={16} />
+              Approve
+            </button>
+            <button className="danger-button" disabled={busy} onClick={() => decide("rejected")}>
+              <UserX size={16} />
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
 function PasswordPanel({ token }) {
   const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [busy, setBusy] = useState(false);
@@ -2588,7 +2983,9 @@ function AdminUserRow({ user, onStatusChange, onPasswordReset, onRemove }) {
       </td>
       <td>{user.farmName || "-"}</td>
       <td>{user.analysisCount}</td>
+      <td>{user.diseaseCount || 0}</td>
       <td>{user.loanCount}</td>
+      <td>{user.insuranceCount || 0}</td>
       <td>{user.orderCount || 0}</td>
       <td>
         {isFarmer ? (
@@ -2636,6 +3033,7 @@ function AdminUserRow({ user, onStatusChange, onPasswordReset, onRemove }) {
 function AdminDashboard({ token }) {
   const [tab, setTab] = useState("reports");
   const [analyses, setAnalyses] = useState([]);
+  const [insurance, setInsurance] = useState([]);
   const [loans, setLoans] = useState([]);
   const [orders, setOrders] = useState([]);
   const [users, setUsers] = useState([]);
@@ -2644,15 +3042,17 @@ function AdminDashboard({ token }) {
 
   async function loadAdminData() {
     setLoading(true);
-    const [analysisData, loanData, userData, orderData, statsData] = await Promise.all([
+    const [analysisData, loanData, insuranceData, userData, orderData, statsData] = await Promise.all([
       apiRequest("/api/analyses", { token }),
       apiRequest("/api/loans", { token }),
+      apiRequest("/api/insurance", { token }),
       apiRequest("/api/admin/users", { token }),
       apiRequest("/api/admin/orders", { token }),
       apiRequest("/api/admin/stats", { token })
     ]);
     setAnalyses(analysisData.analyses);
     setLoans(loanData.loans);
+    setInsurance(insuranceData.insurance);
     setUsers(userData.users);
     setOrders(orderData.orders);
     setStats(statsData.stats);
@@ -2681,6 +3081,17 @@ function AdminDashboard({ token }) {
       body: { status, adminNote }
     });
     setLoans((current) => current.map((loan) => (loan.id === id ? data.loan : loan)));
+    const statsData = await apiRequest("/api/admin/stats", { token });
+    setStats(statsData.stats);
+  }
+
+  async function updateInsuranceStatus(id, status, adminNote) {
+    const data = await apiRequest(`/api/insurance/${id}/status`, {
+      token,
+      method: "PATCH",
+      body: { status, adminNote }
+    });
+    setInsurance((current) => current.map((item) => (item.id === id ? data.insurance : item)));
     const statsData = await apiRequest("/api/admin/stats", { token });
     setStats(statsData.stats);
   }
@@ -2719,6 +3130,7 @@ function AdminDashboard({ token }) {
     setUsers((current) => current.filter((user) => user.id !== id));
     setAnalyses((current) => current.filter((analysis) => analysis.userId !== id));
     setLoans((current) => current.filter((loan) => loan.userId !== id));
+    setInsurance((current) => current.filter((item) => item.userId !== id));
     setOrders((current) => current.filter((order) => order.userId !== id));
     const statsData = await apiRequest("/api/admin/stats", { token });
     setStats(statsData.stats);
@@ -2741,6 +3153,7 @@ function AdminDashboard({ token }) {
           <Metric icon={<FlaskConical size={19} />} label="Reports" value={stats?.totalAnalyses ?? 0} />
           <Metric icon={<Clock3 size={19} />} label="Pending" value={stats?.pending ?? 0} />
           <Metric icon={<HandCoins size={19} />} label="Loan queue" value={stats?.pendingLoans ?? 0} />
+          <Metric icon={<ShieldCheck size={19} />} label="Insurance queue" value={stats?.pendingInsurance ?? 0} />
           <Metric icon={<ShoppingCart size={19} />} label="Market orders" value={stats?.totalOrders ?? 0} />
         </div>
       </section>
@@ -2753,6 +3166,10 @@ function AdminDashboard({ token }) {
         <button className={tab === "loans" ? "active" : ""} onClick={() => setTab("loans")}>
           <HandCoins size={16} />
           Loans
+        </button>
+        <button className={tab === "insurance" ? "active" : ""} onClick={() => setTab("insurance")}>
+          <ShieldCheck size={16} />
+          Insurance
         </button>
         <button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>
           <ShoppingCart size={16} />
@@ -2794,6 +3211,8 @@ function AdminDashboard({ token }) {
             </div>
           )}
 
+          {tab === "insurance" && <InsuranceList insurance={insurance} adminMode onDecision={updateInsuranceStatus} />}
+
           {tab === "orders" && <AdminOrdersPanel orders={orders} onStatusChange={updateOrderStatus} />}
 
           {tab === "users" && (
@@ -2814,7 +3233,9 @@ function AdminDashboard({ token }) {
                       <th>Status</th>
                       <th>Farm</th>
                       <th>Reports</th>
+                      <th>Diseases</th>
                       <th>Loans</th>
+                      <th>Insurance</th>
                       <th>Orders</th>
                       <th>Password</th>
                       <th>Actions</th>
@@ -2836,7 +3257,7 @@ function AdminDashboard({ token }) {
             </>
           )}
 
-          {tab === "analytics" && <AdminAnalyticsPanel analyses={analyses} loans={loans} orders={orders} topSoils={topSoils} stats={stats} />}
+          {tab === "analytics" && <AdminAnalyticsPanel analyses={analyses} loans={loans} insurance={insurance} orders={orders} topSoils={topSoils} stats={stats} />}
         </>
       )}
     </div>
@@ -3045,14 +3466,16 @@ function AdminOrdersPanel({ orders, onStatusChange }) {
   );
 }
 
-function AdminAnalyticsPanel({ analyses, loans, orders, topSoils, stats }) {
+function AdminAnalyticsPanel({ analyses, loans, insurance, orders, topSoils, stats }) {
   const reportStatus = topEntries(analyses.map((analysis) => analysis.status), 4).map(([label, count]) => [titleCase(label), count]);
   const loanStatus = topEntries(loans.map((loan) => loan.status), 4).map(([label, count]) => [titleCase(label), count]);
+  const insuranceStatus = topEntries(insurance.map((item) => item.status), 4).map(([label, count]) => [titleCase(label), count]);
   const orderStatus = topEntries(orders.map((order) => order.status), 4).map(([label, count]) => [titleCase(label), count]);
   const riskMix = topEntries(analyses.map((analysis) => analysis.result?.riskLevel), 4);
   const pendingWork = [
     ["Reports to review", analyses.filter((analysis) => analysis.status === "pending").length],
     ["Loan decisions", loans.filter((loan) => loan.status === "pending").length],
+    ["Insurance decisions", insurance.filter((item) => item.status === "pending").length],
     ["Orders to deliver", orders.filter((order) => order.status !== "delivered").length]
   ];
 
@@ -3088,6 +3511,13 @@ function AdminAnalyticsPanel({ analyses, loans, orders, topSoils, stats }) {
       </section>
       <section className="form-card">
         <div className="section-heading compact-heading">
+          <span className="eyebrow">Protection</span>
+          <h2>Insurance decisions</h2>
+        </div>
+        <SignalBars entries={insuranceStatus} emptyLabel="No insurance yet" />
+      </section>
+      <section className="form-card">
+        <div className="section-heading compact-heading">
           <span className="eyebrow">Market</span>
           <h2>Order fulfilment</h2>
         </div>
@@ -3104,6 +3534,7 @@ function AdminAnalyticsPanel({ analyses, loans, orders, topSoils, stats }) {
         <Metric icon={<Users size={19} />} label="Farmers" value={stats?.farmers ?? 0} />
         <Metric icon={<ShoppingCart size={19} />} label="Orders" value={stats?.totalOrders ?? 0} />
         <Metric icon={<CheckCircle2 size={19} />} label="Approved loans" value={stats?.approvedLoans ?? 0} />
+        <Metric icon={<ShieldCheck size={19} />} label="Insurance" value={stats?.totalInsurance ?? 0} />
       </section>
     </div>
   );

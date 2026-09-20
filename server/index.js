@@ -10,7 +10,9 @@ import { assistantRouter } from "./routes/assistant.js";
 import { assertProductionEnv, clientOrigins, env } from "./config/env.js";
 import { authRouter } from "./routes/auth.js";
 import { connectDatabase } from "./config/database.js";
+import { diseasesRouter } from "./routes/diseases.js";
 import { ensureSeedAdmin } from "./services/users.js";
+import { insuranceRouter } from "./routes/insurance.js";
 import { loansRouter } from "./routes/loans.js";
 import { marketRouter } from "./routes/market.js";
 
@@ -68,6 +70,8 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/analyses", analysesRouter);
+app.use("/api/diseases", diseasesRouter);
+app.use("/api/insurance", insuranceRouter);
 app.use("/api/loans", loansRouter);
 app.use("/api/market", marketRouter);
 app.use("/api/assistant", assistantRouter);

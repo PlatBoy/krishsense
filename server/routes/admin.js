@@ -3,6 +3,8 @@ import { Router } from "express";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { Analysis } from "../models/Analysis.js";
+import { DiseaseReport } from "../models/DiseaseReport.js";
+import { InsuranceApplication } from "../models/InsuranceApplication.js";
 import { LoanApplication } from "../models/LoanApplication.js";
 import { MarketOrder } from "../models/MarketOrder.js";
 import { User } from "../models/User.js";
@@ -42,22 +44,28 @@ function serializeOrder(order) {
 
 adminRouter.get("/users", async (_req, res, next) => {
   try {
-    const [users, analysisCounts, loanCounts, orderCounts] = await Promise.all([
+    const [users, analysisCounts, loanCounts, orderCounts, diseaseCounts, insuranceCounts] = await Promise.all([
       User.find().sort({ createdAt: -1 }),
       Analysis.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }]),
       LoanApplication.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }]),
-      MarketOrder.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }])
+      MarketOrder.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }]),
+      DiseaseReport.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }]),
+      InsuranceApplication.aggregate([{ $group: { _id: "$user", count: { $sum: 1 } } }])
     ]);
 
     const analysisCountByUser = new Map(analysisCounts.map((item) => [item._id.toString(), item.count]));
     const loanCountByUser = new Map(loanCounts.map((item) => [item._id.toString(), item.count]));
     const orderCountByUser = new Map(orderCounts.map((item) => [item._id.toString(), item.count]));
+    const diseaseCountByUser = new Map(diseaseCounts.map((item) => [item._id.toString(), item.count]));
+    const insuranceCountByUser = new Map(insuranceCounts.map((item) => [item._id.toString(), item.count]));
     res.json({
       users: users.map((user) => ({
         ...user.toJSON(),
         analysisCount: analysisCountByUser.get(user._id.toString()) || 0,
         loanCount: loanCountByUser.get(user._id.toString()) || 0,
-        orderCount: orderCountByUser.get(user._id.toString()) || 0
+        orderCount: orderCountByUser.get(user._id.toString()) || 0,
+        diseaseCount: diseaseCountByUser.get(user._id.toString()) || 0,
+        insuranceCount: insuranceCountByUser.get(user._id.toString()) || 0
       }))
     });
   } catch (error) {
@@ -67,15 +75,31 @@ adminRouter.get("/users", async (_req, res, next) => {
 
 adminRouter.get("/stats", async (_req, res, next) => {
   try {
-    const [farmers, totalAnalyses, totalOrders, pending, reviewed, pendingLoans, approvedLoans, rejectedLoans, soilCounts] = await Promise.all([
+    const [
+      farmers,
+      totalAnalyses,
+      totalOrders,
+      totalDiseases,
+      totalInsurance,
+      pending,
+      reviewed,
+      pendingLoans,
+      approvedLoans,
+      rejectedLoans,
+      pendingInsurance,
+      soilCounts
+    ] = await Promise.all([
       User.countDocuments({ role: "farmer" }),
       Analysis.countDocuments(),
       MarketOrder.countDocuments(),
+      DiseaseReport.countDocuments(),
+      InsuranceApplication.countDocuments(),
       Analysis.countDocuments({ status: "pending" }),
       Analysis.countDocuments({ status: "reviewed" }),
       LoanApplication.countDocuments({ status: "pending" }),
       LoanApplication.countDocuments({ status: "approved" }),
       LoanApplication.countDocuments({ status: "rejected" }),
+      InsuranceApplication.countDocuments({ status: "pending" }),
       Analysis.aggregate([{ $group: { _id: "$result.soilType", count: { $sum: 1 } } }])
     ]);
 
@@ -84,11 +108,14 @@ adminRouter.get("/stats", async (_req, res, next) => {
         farmers,
         totalAnalyses,
         totalOrders,
+        totalDiseases,
+        totalInsurance,
         pending,
         reviewed,
         pendingLoans,
         approvedLoans,
         rejectedLoans,
+        pendingInsurance,
         soilCounts: Object.fromEntries(soilCounts.map((item) => [item._id || "Unknown", item.count]))
       }
     });
@@ -133,14 +160,16 @@ adminRouter.patch("/users/:id/status", validateBody(userStatusSchema), async (re
     user.isActive = req.body.isActive;
     await user.save();
 
-    const [analysisCount, loanCount] = await Promise.all([
+    const [analysisCount, loanCount, diseaseCount, insuranceCount] = await Promise.all([
       Analysis.countDocuments({ user: user._id }),
-      LoanApplication.countDocuments({ user: user._id })
+      LoanApplication.countDocuments({ user: user._id }),
+      DiseaseReport.countDocuments({ user: user._id }),
+      InsuranceApplication.countDocuments({ user: user._id })
     ]);
 
     const orderCount = await MarketOrder.countDocuments({ user: user._id });
 
-    res.json({ user: { ...user.toJSON(), analysisCount, loanCount, orderCount } });
+    res.json({ user: { ...user.toJSON(), analysisCount, loanCount, orderCount, diseaseCount, insuranceCount } });
   } catch (error) {
     next(error);
   }
@@ -169,6 +198,8 @@ adminRouter.delete("/users/:id", async (req, res, next) => {
       Analysis.deleteMany({ user: user._id }),
       LoanApplication.deleteMany({ user: user._id }),
       MarketOrder.deleteMany({ user: user._id }),
+      DiseaseReport.deleteMany({ user: user._id }),
+      InsuranceApplication.deleteMany({ user: user._id }),
       user.deleteOne()
     ]);
 

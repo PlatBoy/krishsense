@@ -74,6 +74,29 @@ export const loanStatusSchema = z.object({
   adminNote: z.string().trim().max(700).optional().default("")
 });
 
+export const diseaseInputSchema = z.object({
+  crop: z.string().trim().min(1).max(120),
+  location: z.string().trim().max(160).optional().default(""),
+  symptoms: z.string().trim().max(700).optional().default(""),
+  notes: z.string().trim().max(700).optional().default("")
+});
+
+export const insuranceApplicationSchema = z.object({
+  crop: z.string().trim().min(1).max(120),
+  landArea: z.string().trim().max(40).optional().default(""),
+  landUnit: z.enum(["acre", "hectare", "bigha"]).optional().default("acre"),
+  season: z.string().trim().max(80).optional().default(""),
+  location: z.string().trim().max(160).optional().default(""),
+  coverageAmount: z.coerce.number().min(1000).max(10000000),
+  damageType: z.enum(["drought", "flood", "pest", "disease", "hail", "fire", "other"]).optional().default("other"),
+  farmerNote: z.string().trim().max(900).optional().default("")
+});
+
+export const insuranceStatusSchema = z.object({
+  status: z.enum(["pending", "approved", "rejected"]),
+  adminNote: z.string().trim().max(700).optional().default("")
+});
+
 export const marketOrderSchema = z.object({
   itemId: z.string().trim().min(2).max(80),
   quantity: z.coerce.number().int().min(1).max(100)

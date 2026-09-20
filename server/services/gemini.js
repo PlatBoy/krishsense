@@ -62,6 +62,23 @@ const responseSchema = {
   ]
 };
 
+const diseaseResponseSchema = {
+  type: "object",
+  properties: {
+    crop: { type: "string" },
+    diseaseName: { type: "string" },
+    confidence: { type: "number", minimum: 0, maximum: 100 },
+    severity: { type: "string", enum: ["Low", "Medium", "High"] },
+    summary: { type: "string" },
+    symptoms: { type: "array", items: { type: "string" } },
+    treatments: { type: "array", items: { type: "string" } },
+    prevention: { type: "array", items: { type: "string" } },
+    urgentActions: { type: "array", items: { type: "string" } }
+  },
+  required: ["crop", "diseaseName", "confidence", "severity", "summary", "symptoms", "treatments", "prevention", "urgentActions"],
+  propertyOrdering: ["crop", "diseaseName", "confidence", "severity", "summary", "symptoms", "treatments", "prevention", "urgentActions"]
+};
+
 function parseJsonResponse(text) {
   try {
     return JSON.parse(text);
@@ -199,6 +216,59 @@ Context:
     bestCrops: Array.isArray(parsed.cropSuitability) ? parsed.cropSuitability.slice(0, 6) : [],
     alerts: Array.isArray(parsed.warnings) ? parsed.warnings.slice(0, 5) : [],
     note: "AI photo analysis is guidance only. Confirm fertilizer and pH decisions with a lab soil test.",
+    model: env.GEMINI_MODEL,
+    raw: parsed
+  };
+}
+
+export async function analyzeCropDiseasePhoto({ file, input = {} }) {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is required for AI crop disease photo analysis.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  const base64Image = file.buffer.toString("base64");
+  const prompt = `
+You are an agronomy assistant helping a farmer identify crop disease or pest damage from a plant photo.
+Return practical, safe guidance. If the photo is unclear or not a crop/plant, set diseaseName to Unknown, confidence below 45, and explain what image is needed.
+
+Context:
+- Crop: ${input.crop || "not provided"}
+- Location: ${input.location || "not provided"}
+- Farmer observed symptoms: ${input.symptoms || "not provided"}
+- Notes: ${input.notes || "not provided"}
+`;
+
+  const response = await ai.models.generateContent({
+    model: env.GEMINI_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: file.mimetype, data: base64Image } },
+          { text: prompt }
+        ]
+      }
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: diseaseResponseSchema,
+      temperature: 0.2
+    }
+  });
+
+  const parsed = parseJsonResponse(response.text || "{}");
+  return {
+    crop: parsed.crop || input.crop || "Unknown crop",
+    diseaseName: parsed.diseaseName || "Unknown",
+    confidence: Math.max(0, Math.min(100, Number(parsed.confidence) || 0)),
+    severity: parsed.severity || "Medium",
+    summary: parsed.summary || "The model could not produce a detailed disease summary.",
+    symptoms: Array.isArray(parsed.symptoms) ? parsed.symptoms.slice(0, 6) : [],
+    treatments: Array.isArray(parsed.treatments) ? parsed.treatments.slice(0, 6) : [],
+    prevention: Array.isArray(parsed.prevention) ? parsed.prevention.slice(0, 6) : [],
+    urgentActions: Array.isArray(parsed.urgentActions) ? parsed.urgentActions.slice(0, 5) : [],
+    note: "AI disease detection is guidance only. Confirm severe crop loss with a local agriculture officer before spraying.",
     model: env.GEMINI_MODEL,
     raw: parsed
   };
