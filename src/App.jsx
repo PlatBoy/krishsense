@@ -54,8 +54,20 @@ const LANG_KEY = "krishsense-lang";
 
 const LANGUAGES = [
   { code: "en", label: "EN", name: "English" },
-  { code: "hi", label: "HI", name: "हिंदी" },
-  { code: "mr", label: "MR", name: "मराठी" }
+  { code: "hi", label: "HI", name: "Hindi" },
+  { code: "pa", label: "PA", name: "Punjabi" },
+  { code: "bn", label: "BN", name: "Bengali" },
+  { code: "ta", label: "TA", name: "Tamil" },
+  { code: "te", label: "TE", name: "Telugu" },
+  { code: "mr", label: "MR", name: "Marathi" },
+  { code: "gu", label: "GU", name: "Gujarati" },
+  { code: "kn", label: "KN", name: "Kannada" },
+  { code: "ml", label: "ML", name: "Malayalam" },
+  { code: "ur", label: "UR", name: "Urdu" },
+  { code: "ne", label: "NE", name: "Nepali" },
+  { code: "or", label: "OR", name: "Odia" },
+  { code: "as", label: "AS", name: "Assamese" },
+  { code: "es", label: "ES", name: "Spanish" }
 ];
 const fieldImage =
   "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80";
@@ -268,6 +280,10 @@ function getInitialLanguage() {
     return "en";
   }
   return "en";
+}
+
+function getLanguageName(language) {
+  return LANGUAGES.find((lang) => lang.code === language)?.name || "English";
 }
 
 function getInitialTheme() {
@@ -911,7 +927,7 @@ function Dashboard({ session, onLogout, theme, onThemeToggle, language, onLangua
       {session.user.role === "admin" ? (
         <AdminDashboard token={session.token} />
       ) : (
-        <FarmerDashboard token={session.token} user={session.user} />
+        <FarmerDashboard token={session.token} user={session.user} language={language} />
       )}
     </main>
   );
@@ -938,7 +954,7 @@ function FloatingNewsBanner() {
   );
 }
 
-function FarmerDashboard({ token, user }) {
+function FarmerDashboard({ token, user, language }) {
   const [activeView, setActiveView] = useState("analysis");
   const [analyses, setAnalyses] = useState([]);
   const [loans, setLoans] = useState([]);
@@ -1032,7 +1048,9 @@ function FarmerDashboard({ token, user }) {
         {activeView === "identify" && <SoilIdentifierUpload token={token} onCreated={loadAnalyses} />}
         {activeView === "history" && <AnalysisHistory analyses={analyses} loading={loading} />}
         {activeView === "insights" && <FarmerInsightCenter insights={insights} analyses={analyses} />}
-        {activeView === "tools" && <FarmerToolsPanel token={token} analyses={analyses} loans={loans} market={market} notifications={notifications} />}
+        {activeView === "tools" && (
+          <FarmerToolsPanel token={token} analyses={analyses} loans={loans} market={market} notifications={notifications} language={language} />
+        )}
         {activeView === "market" && <MarketPanel token={token} market={market} onChanged={() => Promise.all([loadMarket(), loadLoans()])} />}
         {activeView === "loans" && <FarmerLoanPanel token={token} loans={loans} onChanged={loadLoans} />}
         {activeView === "account" && <PasswordPanel token={token} />}
@@ -1510,7 +1528,7 @@ function SignalBars({ entries, emptyLabel }) {
   );
 }
 
-function FarmerToolsPanel({ token, analyses, loans, market, notifications }) {
+function FarmerToolsPanel({ token, analyses, loans, market, notifications, language }) {
   const latest = analyses[0];
 
   return (
@@ -1534,7 +1552,7 @@ function FarmerToolsPanel({ token, analyses, loans, market, notifications }) {
         <CropRecommendationPanel latest={latest} />
         <EmiCalculator />
         <NotificationPanel notifications={notifications} />
-        <AiAssistantPanel token={token} latest={latest} />
+        <AiAssistantPanel token={token} latest={latest} language={language} />
       </div>
     </div>
   );
@@ -1752,7 +1770,7 @@ function NotificationPanel({ notifications }) {
   );
 }
 
-function AiAssistantPanel({ token, latest }) {
+function AiAssistantPanel({ token, latest, language }) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1784,7 +1802,9 @@ function AiAssistantPanel({ token, latest }) {
             soilType: latest?.result?.soilType || "",
             crop: latest?.input?.crop || "",
             location: latest?.input?.location || "",
-            healthScore: latest?.result?.healthScore || ""
+            healthScore: latest?.result?.healthScore || "",
+            language,
+            languageName: getLanguageName(language)
           }
         }
       });

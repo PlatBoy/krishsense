@@ -99,7 +99,9 @@ export const assistantChatSchema = z.object({
       soilType: z.string().trim().max(80).optional().default(""),
       crop: z.string().trim().max(120).optional().default(""),
       location: z.string().trim().max(160).optional().default(""),
-      healthScore: z.union([z.string(), z.number()]).optional().default("")
+      healthScore: z.union([z.string(), z.number()]).optional().default(""),
+      language: z.string().trim().max(12).optional().default("en"),
+      languageName: z.string().trim().max(80).optional().default("English")
     })
     .optional()
     .default({})

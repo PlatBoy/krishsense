@@ -95,6 +95,7 @@ function localAssistantAnswer(question, context = {}) {
   const soil = context.soilType || "your current soil";
   const crop = cropFromQuestion(question, context.crop);
   const health = context.healthScore ? `Your latest soil health score is ${context.healthScore}. ` : "";
+  const languageNote = context.languageName && context.languageName !== "English" ? `Selected language: ${context.languageName}. ` : "";
   const lowerQuestion = String(question || "").toLowerCase();
   const lines = [];
 
@@ -116,7 +117,7 @@ function localAssistantAnswer(question, context = {}) {
     lines.push("Add organic matter, watch for nutrient deficiency, and avoid sudden heavy chemical doses.");
   }
 
-  lines.push(`${health}Confirm exact fertilizer and pH correction with a local soil test when possible.`.trim());
+  lines.push(`${languageNote}${health}Confirm exact fertilizer and pH correction with a local soil test when possible.`.trim());
   return lines.join("\n");
 }
 
@@ -212,6 +213,7 @@ export async function askFarmingAssistant({ question, context = {} }) {
 You are KrishiSense, a practical farming assistant for Indian farmers.
 Answer simply in 4 to 6 short lines. Give safe, practical guidance.
 Do not claim to replace a government officer, agronomist, bank, or lab test.
+Answer in ${context.languageName || "English"}. If the language is not English, translate the whole answer naturally.
 
 Farmer context:
 - Soil type: ${context.soilType || "not provided"}
