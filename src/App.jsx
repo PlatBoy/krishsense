@@ -664,6 +664,7 @@ function ThemeSwitch({ theme, onToggle }) {
         <span />
       </span>
       {dark ? <Moon size={17} /> : <Sun size={17} />}
+      <span className="theme-switch-label">{dark ? "Dark" : "Light"}</span>
     </button>
   );
 }

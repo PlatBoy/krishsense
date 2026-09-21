@@ -100,6 +100,57 @@
   --upload-bg: linear-gradient(135deg, rgba(22, 43, 33, 0.96), rgba(16, 34, 26, 0.86)), #10221a;
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f2f7f3;
+  --body-gradient:
+    radial-gradient(circle at top left, rgba(76, 203, 120, 0.18), transparent 34rem),
+    radial-gradient(circle at top right, rgba(230, 184, 92, 0.18), transparent 30rem),
+    linear-gradient(180deg, #f2f7f3 0%, #dfeee4 100%);
+  --auth-bg: #f2f7f3;
+  --panel: #ffffff;
+  --panel-soft: #eef7f1;
+  --input-bg: #ffffff;
+  --active-bg: #e9f7ee;
+  --control-bg: #e8f1eb;
+  --chip-bg: #edf6f0;
+  --score-bg: #f7fbf8;
+  --info-bg: #edf8f1;
+  --info-ink: #195b33;
+  --table-header-bg: #edf6f0;
+  --topbar-bg: rgba(242, 247, 243, 0.9);
+  --button-muted: #edf6f0;
+  --button-muted-strong: #e3f2e8;
+  --error-bg: #fde8e3;
+  --error-line: #efbbb0;
+  --error-ink: #87291f;
+  --success-bg: #def4e5;
+  --success-line: #9ddbb2;
+  --success-ink: #18562f;
+  --warning-bg: #fff2d4;
+  --warning-line: #e8cb83;
+  --warning-ink: #6d4709;
+  --review-bg: #edf8f1;
+  --review-line: #b7dbc4;
+  --review-ink: #195b33;
+  --ink: #08130f;
+  --copy: #39483f;
+  --copy-strong: #10221a;
+  --muted: #66756b;
+  --line: #cbdcd1;
+  --green: #259e55;
+  --green-dark: #145c34;
+  --primary-dark: #145c34;
+  --green-soft: #e1f5e8;
+  --soil: #8a5a36;
+  --blue: #4ccb78;
+  --amber: #a76f13;
+  --danger: #a13a32;
+  --shadow: 0 20px 60px rgba(16, 34, 26, 0.14);
+  --card-shadow: 0 12px 38px rgba(16, 34, 26, 0.1);
+  --upload-bg: linear-gradient(135deg, rgba(225, 245, 232, 0.96), rgba(255, 242, 212, 0.72)), #f7fbf8;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -437,7 +488,7 @@ textarea:focus {
 }
 
 .theme-switch {
-  min-width: 76px;
+  min-width: 108px;
   padding: 8px 10px;
   color: var(--green-dark);
   background: var(--button-muted);
@@ -454,18 +505,26 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .theme-switch[aria-checked="true"] .theme-switch-track {
   justify-content: flex-end;
+  background: rgba(76, 203, 120, 0.16);
+  border-color: rgba(139, 224, 165, 0.42);
 }
 
 .theme-switch-track span {
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--green), var(--blue));
+  background: linear-gradient(135deg, var(--green), var(--amber));
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+}
+
+.theme-switch-label {
+  min-width: 34px;
+  text-align: left;
 }
 
 .lang-switch {
