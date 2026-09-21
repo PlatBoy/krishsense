@@ -1,4 +1,4 @@
-# KrishiSense
+# Cropura
 
 Production-ready farmer soil analysis app with secure auth, Gemini multimodal soil photo classification, MongoDB persistence, Cloudinary image storage, and admin review dashboards.
 
@@ -20,7 +20,7 @@ Create these before deploying:
 - Google AI Studio Gemini API key.
 - Render or Vercel project connected to `xodi6/project1`.
 
-admin@krishsense.app
+admin@cropura.app
 admin123456
 
 

@@ -9,7 +9,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "KrishiSense_Presentation_Guide.docx"
+OUT = ROOT / "Cropura_Presentation_Guide.docx"
 
 
 BLUE = "2E74B5"
@@ -90,7 +90,7 @@ def set_run_font(run, size=None, bold=False, color=None):
 def add_title(doc):
     p = doc.add_paragraph()
     p.paragraph_format.space_after = Pt(8)
-    run = p.add_run("KrishiSense Project Presentation Guide")
+    run = p.add_run("Cropura Project Presentation Guide")
     set_run_font(run, 24, True, DARK_BLUE)
 
     p = doc.add_paragraph()
@@ -230,7 +230,7 @@ def add_simple_architecture(doc):
 
 def add_script_lines(doc):
     lines = [
-        "My project is called KrishiSense. It is made for farmers who want simple help with soil and crop decisions.",
+        "My project is called Cropura. It is made for farmers who want simple help with soil and crop decisions.",
         "The farmer can upload a soil photo and enter land details. The backend sends the image to Gemini and stores the report in MongoDB.",
         "There is also an admin portal. The admin can review reports, manage farmers, approve loans, and reset passwords.",
         "I added a market section. When a loan is approved, the farmer account balance increases, and the farmer can buy seeds, fertiliser, equipment, or tractor items.",
@@ -264,7 +264,7 @@ def build_doc():
     add_callout(
         doc,
         "One-line idea",
-        "KrishiSense is a web app that helps farmers understand soil, manage reports, apply for loans, and use loan money in a simple market.",
+        "Cropura is a web app that helps farmers understand soil, manage reports, apply for loans, and use loan money in a simple market.",
     )
     add_h1(doc, "1. What The Project Does")
     add_para(
@@ -342,7 +342,7 @@ def build_doc():
 
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = footer.add_run("KrishiSense presentation guide")
+    run = footer.add_run("Cropura presentation guide")
     set_run_font(run, 9, False, MUTED)
 
     doc.save(OUT)

@@ -24,7 +24,7 @@ export async function uploadImageToCloudinary(file, context = {}) {
       {
         folder: env.CLOUDINARY_FOLDER,
         resource_type: "image",
-        tags: ["krishsense", "soil-analysis"],
+        tags: ["cropura", "soil-analysis"],
         context
       },
       (error, result) => {

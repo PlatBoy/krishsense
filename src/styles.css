@@ -1,97 +1,103 @@
 :root {
-  color-scheme: light;
-  --bg: #f4f7f1;
-  --body-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(244, 247, 241, 0.92));
-  --auth-bg: #f8faf5;
-  --panel: #ffffff;
-  --panel-soft: #eef6ed;
-  --input-bg: #ffffff;
-  --active-bg: #ffffff;
-  --control-bg: #e6eee4;
-  --chip-bg: #edf4eb;
-  --score-bg: #f3f7f0;
-  --info-bg: #e6f2f7;
-  --info-ink: #244f68;
-  --table-header-bg: #f6f9f4;
-  --topbar-bg: rgba(255, 255, 255, 0.86);
-  --button-muted: #e9f1e8;
-  --button-muted-strong: #e6f0e5;
-  --error-bg: #f8e3df;
-  --error-line: #ecc4be;
-  --error-ink: #721f1a;
-  --success-bg: #ddf1df;
-  --success-line: #b8dbbd;
-  --success-ink: #17492c;
-  --warning-bg: #f8edcf;
-  --warning-line: #ecd596;
-  --warning-ink: #7a4b00;
-  --review-bg: #dceff8;
-  --review-line: #bdddec;
-  --review-ink: #24506a;
-  --ink: #18231c;
-  --copy: #49554b;
-  --copy-strong: #38443b;
-  --muted: #667268;
-  --line: #d9e2d8;
-  --green: #21663a;
-  --green-dark: #123c25;
-  --primary-dark: #123c25;
-  --green-soft: #dff0df;
+  color-scheme: dark;
+  --bg: #08130f;
+  --body-gradient:
+    radial-gradient(circle at top left, rgba(76, 203, 120, 0.16), transparent 34rem),
+    radial-gradient(circle at top right, rgba(230, 184, 92, 0.13), transparent 30rem),
+    linear-gradient(180deg, #08130f 0%, #10221a 100%);
+  --auth-bg: #08130f;
+  --panel: #10221a;
+  --panel-soft: #162b21;
+  --input-bg: #08130f;
+  --active-bg: #162b21;
+  --control-bg: #10221a;
+  --chip-bg: #162b21;
+  --score-bg: #10221a;
+  --info-bg: #10221a;
+  --info-ink: #8be0a5;
+  --table-header-bg: #10221a;
+  --topbar-bg: rgba(16, 34, 26, 0.9);
+  --button-muted: #10221a;
+  --button-muted-strong: #162b21;
+  --error-bg: #351a19;
+  --error-line: #7a3630;
+  --error-ink: #ffd2c7;
+  --success-bg: #123520;
+  --success-line: #286943;
+  --success-ink: #8be0a5;
+  --warning-bg: #3b2f16;
+  --warning-line: #7c642b;
+  --warning-ink: #e6b85c;
+  --review-bg: #10221a;
+  --review-line: #31523e;
+  --review-ink: #8be0a5;
+  --ink: #f2f7f3;
+  --copy: #c7d5cb;
+  --copy-strong: #f2f7f3;
+  --muted: #9aaa9f;
+  --line: #274336;
+  --green: #4ccb78;
+  --green-dark: #8be0a5;
+  --primary-dark: #4ccb78;
+  --green-soft: #162b21;
   --soil: #8a5a36;
-  --blue: #2e6f95;
-  --amber: #bd781c;
-  --danger: #a13a32;
-  --shadow: 0 18px 55px rgba(23, 45, 28, 0.12);
-  --card-shadow: 0 10px 36px rgba(22, 42, 26, 0.07);
-  --upload-bg: linear-gradient(135deg, rgba(223, 240, 223, 0.94), rgba(227, 239, 233, 0.78)), #eff7ed;
+  --blue: #8be0a5;
+  --amber: #e6b85c;
+  --danger: #ff8b7d;
+  --shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
+  --card-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  --upload-bg: linear-gradient(135deg, rgba(22, 43, 33, 0.96), rgba(16, 34, 26, 0.86)), #10221a;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1712;
-  --body-gradient: linear-gradient(180deg, rgba(18, 36, 25, 0.88), rgba(8, 14, 10, 0.96));
-  --auth-bg: #111b15;
-  --panel: #17231b;
-  --panel-soft: #1d3024;
-  --input-bg: #111b15;
-  --active-bg: #213328;
-  --control-bg: #101a14;
-  --chip-bg: #203728;
-  --score-bg: #132019;
-  --info-bg: #122a35;
-  --info-ink: #b6dcec;
-  --table-header-bg: #122019;
-  --topbar-bg: rgba(16, 25, 19, 0.88);
-  --button-muted: #1d3024;
-  --button-muted-strong: #243a2c;
+  --bg: #08130f;
+  --body-gradient:
+    radial-gradient(circle at top left, rgba(76, 203, 120, 0.16), transparent 34rem),
+    radial-gradient(circle at top right, rgba(230, 184, 92, 0.13), transparent 30rem),
+    linear-gradient(180deg, #08130f 0%, #10221a 100%);
+  --auth-bg: #08130f;
+  --panel: #10221a;
+  --panel-soft: #162b21;
+  --input-bg: #08130f;
+  --active-bg: #162b21;
+  --control-bg: #10221a;
+  --chip-bg: #162b21;
+  --score-bg: #10221a;
+  --info-bg: #10221a;
+  --info-ink: #8be0a5;
+  --table-header-bg: #10221a;
+  --topbar-bg: rgba(16, 34, 26, 0.9);
+  --button-muted: #10221a;
+  --button-muted-strong: #162b21;
   --error-bg: #3b1b19;
   --error-line: #69322c;
   --error-ink: #ffc7be;
-  --success-bg: #173421;
-  --success-line: #356642;
-  --success-ink: #c7f2ce;
+  --success-bg: #123520;
+  --success-line: #286943;
+  --success-ink: #8be0a5;
   --warning-bg: #3d3118;
   --warning-line: #715d2a;
-  --warning-ink: #f5d98a;
-  --review-bg: #142e3d;
-  --review-line: #315d76;
-  --review-ink: #bfe4f5;
-  --ink: #edf8ef;
-  --copy: #c4d3c8;
-  --copy-strong: #d9eadc;
-  --muted: #9caf9f;
-  --line: #304135;
-  --green: #64bd78;
-  --green-dark: #d8f7dc;
-  --primary-dark: #1d7a43;
-  --green-soft: #1f3a29;
+  --warning-ink: #e6b85c;
+  --review-bg: #10221a;
+  --review-line: #31523e;
+  --review-ink: #8be0a5;
+  --ink: #f2f7f3;
+  --copy: #c7d5cb;
+  --copy-strong: #f2f7f3;
+  --muted: #9aaa9f;
+  --line: #274336;
+  --green: #4ccb78;
+  --green-dark: #8be0a5;
+  --primary-dark: #4ccb78;
+  --green-soft: #162b21;
   --soil: #a96f42;
-  --blue: #6bb4d5;
-  --amber: #e0ad4f;
+  --blue: #8be0a5;
+  --amber: #e6b85c;
   --danger: #ff9b8d;
-  --shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
-  --card-shadow: 0 14px 42px rgba(0, 0, 0, 0.24);
-  --upload-bg: linear-gradient(135deg, rgba(31, 58, 41, 0.95), rgba(18, 42, 53, 0.78)), #122019;
+  --shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
+  --card-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  --upload-bg: linear-gradient(135deg, rgba(22, 43, 33, 0.96), rgba(16, 34, 26, 0.86)), #10221a;
 }
 
 * {
@@ -199,9 +205,9 @@ img {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--green), var(--blue));
-  box-shadow: 0 12px 32px rgba(18, 60, 37, 0.22);
+  color: var(--bg);
+  background: linear-gradient(135deg, var(--green), var(--amber));
+  box-shadow: 0 12px 32px rgba(76, 203, 120, 0.22);
   flex: 0 0 auto;
 }
 
@@ -216,10 +222,16 @@ img {
 
 .brand-lockup p,
 .eyebrow {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--amber);
   font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.brand-lockup h1,
+.app-brand strong {
+  color: var(--green-dark);
+  letter-spacing: 0;
 }
 
 .brand-lockup h1 {
@@ -621,8 +633,8 @@ textarea:focus {
   width: max-content;
   padding: 0 10px;
   border-radius: 8px;
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--green), var(--blue));
+  color: var(--bg);
+  background: linear-gradient(135deg, var(--green), var(--amber));
   font-weight: 900;
   white-space: nowrap;
 }
@@ -649,7 +661,7 @@ textarea:focus {
 
 .news-ticker strong {
   margin-right: 7px;
-  color: var(--green-dark);
+  color: var(--amber);
 }
 
 @keyframes news-scroll {
@@ -756,6 +768,15 @@ textarea:focus {
   justify-content: center;
   color: var(--green-dark);
   background: var(--green-soft);
+}
+
+.metric-card strong,
+.section-heading h2,
+.tool-heading h3,
+.loan-card h3,
+.result-card h3,
+.analysis-card h3 {
+  color: var(--green-dark);
 }
 
 .metric-card p {

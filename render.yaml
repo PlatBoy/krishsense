@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: krishsense
+    name: cropura
     env: node
     plan: starter
     region: oregon
@@ -30,10 +30,10 @@ services:
       - key: CLOUDINARY_API_SECRET
         sync: false
       - key: CLOUDINARY_FOLDER
-        value: krishsense/soil-photos
+        value: cropura/soil-photos
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
       - key: ADMIN_NAME
-        value: KrishiSense Admin
+        value: Cropura Admin

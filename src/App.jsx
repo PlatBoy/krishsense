@@ -48,9 +48,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
-const SESSION_KEY = "krishsense-session";
-const THEME_KEY = "krishsense-theme";
-const LANG_KEY = "krishsense-lang";
+const SESSION_KEY = "cropura-session";
+const THEME_KEY = "cropura-theme";
+const LANG_KEY = "cropura-lang";
 
 const LANGUAGES = [
   { code: "en", label: "EN", name: "English" },
@@ -302,10 +302,10 @@ function getInitialTheme() {
     const savedTheme = localStorage.getItem(THEME_KEY);
     if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
   } catch {
-    return "light";
+    return "dark";
   }
 
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "dark";
 }
 
 function csvValue(value) {
@@ -346,7 +346,7 @@ function exportAnalysesCsv(analyses) {
     analysis.result?.summary
   ]);
   const csv = [header, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
-  downloadTextFile(`krishsense-reports-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+  downloadTextFile(`cropura-reports-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
 }
 
 function exportUsersCsv(users) {
@@ -365,7 +365,7 @@ function exportUsersCsv(users) {
     user.walletBalance || 0
   ]);
   const csv = [header, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
-  downloadTextFile(`krishsense-users-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+  downloadTextFile(`cropura-users-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
 }
 
 function exportOrdersCsv(orders) {
@@ -383,7 +383,7 @@ function exportOrdersCsv(orders) {
     titleCase(order.status)
   ]);
   const csv = [header, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
-  downloadTextFile(`krishsense-orders-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+  downloadTextFile(`cropura-orders-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
 }
 
 function assistantAnswerLines(answer) {
@@ -411,7 +411,7 @@ function printAnalysisReport(analysis) {
   const html = `<!doctype html>
 <html>
   <head>
-    <title>KrishiSense Soil Report</title>
+    <title>Cropura Soil Report</title>
     <style>
       body { font-family: Arial, sans-serif; color: #17231b; padding: 28px; line-height: 1.45; }
       h1 { margin: 0 0 4px; color: #21663a; }
@@ -424,7 +424,7 @@ function printAnalysisReport(analysis) {
     </style>
   </head>
   <body>
-    <h1>KrishiSense Soil Report</h1>
+    <h1>Cropura Soil Report</h1>
     <p class="muted">${escapeHtml(formatDate(analysis.createdAt))}</p>
     ${analysis.photoUrl ? `<img src="${escapeHtml(analysis.photoUrl)}" alt="Soil" style="width:180px;height:130px;object-fit:cover;border-radius:8px" />` : ""}
     <table>${rows.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value ?? "Not available")}</td></tr>`).join("")}</table>
@@ -437,7 +437,7 @@ function printAnalysisReport(analysis) {
 </html>`;
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
-    downloadTextFile(`krishsense-report-${analysis.id}.html`, html, "text/html;charset=utf-8");
+    downloadTextFile(`cropura-report-${analysis.id}.html`, html, "text/html;charset=utf-8");
     return;
   }
   reportWindow.document.write(html);
@@ -540,7 +540,7 @@ function buildNotifications(analyses, loans, market) {
   });
   if (!notifications.length) {
     notifications.push({
-      title: "Welcome to KrishiSense",
+      title: "Welcome to Cropura",
       detail: "Upload soil photos, apply for loans, and track farm tools here."
     });
   }
@@ -605,7 +605,7 @@ function App() {
     return (
       <main className="loading-screen">
         <Sprout size={34} />
-        <span>Opening KrishiSense</span>
+        <span>Opening Cropura</span>
       </main>
     );
   }
@@ -780,7 +780,7 @@ function LoginView({ onLogin, theme, onThemeToggle, language, onLanguageChange }
             <Sprout size={24} />
           </span>
           <div>
-            <p>KrishiSense</p>
+            <p>Cropura</p>
             <h1>Soil decisions for every field</h1>
           </div>
         </div>
@@ -918,7 +918,7 @@ function Dashboard({ session, onLogout, theme, onThemeToggle, language, onLangua
             <Sprout size={23} />
           </span>
           <div>
-            <strong>KrishiSense</strong>
+            <strong>Cropura</strong>
             <span>{session.user.role === "admin" ? "Admin console" : session.user.farmName || "Farmer desk"}</span>
           </div>
         </div>

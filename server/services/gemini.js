@@ -280,7 +280,7 @@ export async function askFarmingAssistant({ question, context = {} }) {
   }
 
   const prompt = `
-You are KrishiSense, a practical farming assistant for Indian farmers.
+You are Cropura, a practical farming assistant for Indian farmers.
 Answer simply in 4 to 6 short lines. Give safe, practical guidance.
 Do not claim to replace a government officer, agronomist, bank, or lab test.
 Answer in ${context.languageName || "English"}. If the language is not English, translate the whole answer naturally.

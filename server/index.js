@@ -61,7 +61,7 @@ app.use(
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
-    service: "krishsense",
+    service: "cropura",
     database: "mongodb",
     imageStorage: "cloudinary",
     ai: "gemini"
@@ -95,7 +95,7 @@ await ensureSeedAdmin();
 
 if (!process.env.VERCEL && env.NODE_ENV !== "test") {
   app.listen(env.PORT, () => {
-    console.log(`KrishiSense API running at http://localhost:${env.PORT}`);
+    console.log(`Cropura API running at http://localhost:${env.PORT}`);
   });
 }
 
